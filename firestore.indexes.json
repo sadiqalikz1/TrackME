@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "transactions",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -16,7 +16,7 @@
     },
     {
       "collectionGroup": "transactions",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -34,7 +34,7 @@
     },
     {
       "collectionGroup": "budgets",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -48,7 +48,7 @@
     },
     {
       "collectionGroup": "works",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -66,7 +66,7 @@
     },
     {
       "collectionGroup": "works",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -80,7 +80,7 @@
     },
     {
       "collectionGroup": "goals",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -98,7 +98,7 @@
     },
     {
       "collectionGroup": "billReminders",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -112,7 +112,7 @@
     },
     {
       "collectionGroup": "recurringTransactions",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -130,7 +130,7 @@
     },
     {
       "collectionGroup": "quotations",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
@@ -148,7 +148,7 @@
     },
     {
       "collectionGroup": "quotations",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "uid",
