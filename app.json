@@ -1,6 +1,6 @@
 {
   "expo": {
-    "sdkVersion": "54.0.0",
+
     "name": "TrackME",
     "slug": "trackme",
     "version": "1.0.0",
@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "scheme": "trackme",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
