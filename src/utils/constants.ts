@@ -1,28 +1,40 @@
-import { TransactionCategory, WorkCategory, Currency, CurrencyInfo } from '@/types';
+import { TransactionCategory, WorkCategory, Currency, WorkStatus, RecurringFrequency, CurrencyInfo } from '@/types';
 
-// Transaction Categories with icons and colors
-export const TRANSACTION_CATEGORIES: Record<TransactionCategory, { label: string; icon: string; color: string }> = {
-  food: { label: 'Food & Dining', icon: 'restaurant', color: '#f97316' },
-  transport: { label: 'Transport', icon: 'car', color: '#3b82f6' },
-  rent: { label: 'Rent & Housing', icon: 'home', color: '#8b5cf6' },
-  shopping: { label: 'Shopping', icon: 'shopping-bag', color: '#ec4899' },
-  entertainment: { label: 'Entertainment', icon: 'film', color: '#f59e0b' },
-  health: { label: 'Health', icon: 'heart', color: '#ef4444' },
-  salary: { label: 'Salary', icon: 'briefcase', color: '#10b981' },
-  investment: { label: 'Investment', icon: 'trending-up', color: '#06b6d4' },
-  bills: { label: 'Bills & Utilities', icon: 'file-text', color: '#6366f1' },
-  other: { label: 'Other', icon: 'more-horizontal', color: '#64748b' },
+// Transaction Categories
+export const TRANSACTION_CATEGORIES: Record<TransactionCategory, { icon: string; color: string; label: string }> = {
+  food: { icon: 'fast-food', color: '#f97316', label: 'Food & Dining' },
+  transport: { icon: 'car', color: '#3b82f6', label: 'Transport' },
+  rent: { icon: 'home', color: '#8b5cf6', label: 'Rent' },
+  shopping: { icon: 'cart', color: '#ec4899', label: 'Shopping' },
+  entertainment: { icon: 'game-controller', color: '#14b8a6', label: 'Entertainment' },
+  health: { icon: 'medkit', color: '#ef4444', label: 'Health' },
+  salary: { icon: 'wallet', color: '#10b981', label: 'Salary' },
+  investment: { icon: 'trending-up', color: '#6366f1', label: 'Investment' },
+  bills: { icon: 'receipt', color: '#f59e0b', label: 'Bills' },
+  utilities: { icon: 'flash', color: '#06b6d4', label: 'Utilities' },
+  other: { icon: 'ellipsis-horizontal', color: '#6b7280', label: 'Other' },
 };
 
+export const INCOME_CATEGORIES: TransactionCategory[] = ['salary', 'investment', 'other'];
+export const EXPENSE_CATEGORIES: TransactionCategory[] = ['food', 'transport', 'rent', 'shopping', 'entertainment', 'health', 'bills', 'utilities', 'other'];
+
 // Work Categories
-export const WORK_CATEGORIES: Record<WorkCategory, { label: string; icon: string; color: string }> = {
-  cctv: { label: 'CCTV Installation', icon: 'video', color: '#3b82f6' },
-  hardware: { label: 'Computer Hardware', icon: 'cpu', color: '#8b5cf6' },
-  networking: { label: 'Networking', icon: 'wifi', color: '#06b6d4' },
-  software: { label: 'Software Development', icon: 'code', color: '#10b981' },
-  maintenance: { label: 'Maintenance', icon: 'tool', color: '#f59e0b' },
-  consultation: { label: 'Consultation', icon: 'users', color: '#ec4899' },
-  other: { label: 'Other', icon: 'more-horizontal', color: '#64748b' },
+export const WORK_CATEGORIES: Record<WorkCategory, { icon: string; color: string; label: string }> = {
+  cctv: { icon: 'videocam', color: '#3b82f6', label: 'CCTV' },
+  hardware: { icon: 'hardware-chip', color: '#8b5cf6', label: 'Hardware' },
+  networking: { icon: 'globe', color: '#14b8a6', label: 'Networking' },
+  software: { icon: 'code', color: '#6366f1', label: 'Software' },
+  maintenance: { icon: 'build', color: '#f59e0b', label: 'Maintenance' },
+  consultation: { icon: 'chatbubbles', color: '#ec4899', label: 'Consultation' },
+  other: { icon: 'ellipsis-horizontal', color: '#6b7280', label: 'Other' },
+};
+
+// Work Status
+export const STATUS_COLORS: Record<WorkStatus, { color: string; bgColor: string; label: string }> = {
+  pending: { color: '#f59e0b', bgColor: '#fef3c7', label: 'Pending' },
+  'in-progress': { color: '#3b82f6', bgColor: '#dbeafe', label: 'In Progress' },
+  completed: { color: '#10b981', bgColor: '#d1fae5', label: 'Completed' },
+  cancelled: { color: '#ef4444', bgColor: '#fee2e2', label: 'Cancelled' },
 };
 
 // Currencies
@@ -35,116 +47,75 @@ export const CURRENCIES: CurrencyInfo[] = [
   { code: 'LKR', symbol: 'Rs', name: 'Sri Lankan Rupee' },
 ];
 
-// Chart Colors
-export const CHART_COLORS = [
-  '#6366f1', // Primary indigo
-  '#10b981', // Emerald
-  '#f59e0b', // Amber
-  '#ef4444', // Red
-  '#3b82f6', // Blue
-  '#8b5cf6', // Violet
-  '#ec4899', // Pink
-  '#06b6d4', // Cyan
-  '#f97316', // Orange
-];
-
-// Goal Colors
-export const GOAL_COLORS = [
-  '#6366f1',
-  '#10b981',
-  '#f59e0b',
-  '#ef4444',
-  '#3b82f6',
-  '#8b5cf6',
-  '#ec4899',
-  '#06b6d4',
-  '#84cc16',
-];
-
-// Status Colors
-export const STATUS_COLORS = {
-  pending: '#f59e0b',
-  'in-progress': '#3b82f6',
-  completed: '#10b981',
-  cancelled: '#ef4444',
-};
-
-// Work Status Options
-export const WORK_STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'in-progress', label: 'In Progress' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
-
-// Recurring Frequency Options
-export const FREQUENCY_OPTIONS = [
+// Frequency Options
+export const FREQUENCY_OPTIONS: { value: RecurringFrequency; label: string }[] = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
   { value: 'yearly', label: 'Yearly' },
 ];
 
-// Notification Days Before Options
-export const NOTIFICATION_DAYS_OPTIONS = [
-  { value: 0, label: 'On due date' },
-  { value: 1, label: '1 day before' },
-  { value: 3, label: '3 days before' },
-  { value: 7, label: '1 week before' },
-];
-
-// Default User Settings
-export const DEFAULT_USER_SETTINGS = {
-  currency: 'USD' as Currency,
-  theme: 'dark' as const,
-  budgetAlertThreshold: 80,
-  biometricEnabled: false,
-};
-
 // Date Formats
 export const DATE_FORMATS = {
-  display: 'MMM dd, yyyy',
-  displayShort: 'MMM dd',
-  month: 'MMMM yyyy',
+  display: 'MMM d, yyyy',
+  monthYear: 'MMMM yyyy',
   monthKey: 'yyyy-MM',
-  time: 'HH:mm',
-  full: 'MMM dd, yyyy HH:mm',
-};
-
-// API Endpoints
-export const API_ENDPOINTS = {
-  exchangeRates: 'https://v6.exchangerate-api.com/v6',
+  time: 'h:mm a',
+  full: 'EEEE, MMMM d, yyyy',
+  short: 'MM/dd/yyyy',
 };
 
 // Storage Keys
 export const STORAGE_KEYS = {
-  user: '@financeflow:user',
-  theme: '@financeflow:theme',
-  currency: '@financeflow:currency',
-  biometric: '@financeflow:biometric',
-  exchangeRates: '@financeflow:exchangeRates',
-  lastSync: '@financeflow:lastSync',
-  offlineQueue: '@financeflow:offlineQueue',
+  USER: '@trackme_user',
+  THEME: '@trackme_theme',
+  CURRENCY: '@trackme_currency',
+  LAST_SYNC: '@trackme_last_sync',
+  BIOMETRIC: '@trackme_biometric',
 };
 
 // Firestore Collections
 export const COLLECTIONS = {
-  users: 'users',
-  transactions: 'transactions',
-  budgets: 'budgets',
-  works: 'works',
-  goals: 'goals',
-  recurring: 'recurring',
-  billReminders: 'billReminders',
+  USERS: 'users',
+  TRANSACTIONS: 'transactions',
+  BUDGETS: 'budgets',
+  WORKS: 'works',
+  GOALS: 'goals',
+  RECURRING: 'recurring',
+  BILL_REMINDERS: 'billReminders',
 };
 
-// App Constants
+// App Configuration
 export const APP_CONFIG = {
-  name: 'FinanceFlow',
-  version: '1.0.0',
-  maxPhotosPerWork: 5,
-  maxTransactionsPerPage: 50,
-  syncIntervalMs: 30000, // 30 seconds
-  exchangeRateCacheMs: 86400000, // 24 hours
-  budgetAlertDefault: 80, // percentage
+  APP_NAME: 'TrackME',
+  VERSION: '1.0.0',
+  MAX_BUDGET_CATEGORIES: 10,
+  MAX_GOALS: 20,
+  DEFAULT_BUDGET_ALERT: 80, // percentage
+  SYNC_INTERVAL: 30000, // 30 seconds
+  TOAST_DURATION: {
+    success: 3000,
+    error: 5000,
+    warning: 4000,
+    info: 3000,
+  },
 };
+
+// Goal Colors
+export const GOAL_COLORS = [
+  '#ef4444', // red
+  '#f97316', // orange
+  '#f59e0b', // amber
+  '#84cc16', // lime
+  '#10b981', // emerald
+  '#14b8a6', // teal
+  '#06b6d4', // cyan
+  '#3b82f6', // blue
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#a855f7', // purple
+  '#ec4899', // pink
+];
+
+// Progress Steps for Work
+export const PROGRESS_STEPS = [0, 25, 50, 75, 100];

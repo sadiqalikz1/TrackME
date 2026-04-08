@@ -1,56 +1,46 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '@/contexts/ThemeContext';
+import { View, StyleSheet, ViewStyle } from 'react-native';
+import { useTheme } from '@/contexts';
 
 interface ProgressBarProps {
   progress: number; // 0-100
   color?: string;
   height?: number;
-  showLabel?: boolean;
-  label?: string;
+  style?: ViewStyle;
+  showOverflow?: boolean;
 }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   color,
   height = 8,
-  showLabel = false,
-  label,
+  style,
+  showOverflow = false,
 }) => {
   const { colors } = useTheme();
-  const clampedProgress = Math.min(Math.max(progress, 0), 100);
-  const barColor = color || colors.primary;
-
-  const getProgressColor = (): string => {
-    if (color) return color;
-    if (clampedProgress >= 90) return colors.danger;
-    if (clampedProgress >= 75) return colors.warning;
-    return colors.primary;
-  };
+  
+  const clampedProgress = showOverflow ? progress : Math.min(progress, 100);
+  const barColor = color || (progress > 100 ? colors.danger : colors.primary);
+  const backgroundColor = progress > 100 ? colors.danger + '30' : colors.border;
 
   return (
-    <View style={styles.container}>
-      {showLabel && (
-        <View style={styles.labelContainer}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>
-            {label}
-          </Text>
-          <Text style={[styles.percentage, { color: getProgressColor() }]}>
-            {clampedProgress.toFixed(0)}%
-          </Text>
-        </View>
-      )}
-      <View style={[styles.track, { height, backgroundColor: colors.cardSecondary }]}>
-        <View
-          style={[
-            styles.fill,
-            {
-              width: `${clampedProgress}%`,
-              backgroundColor: getProgressColor(),
-            },
-          ]}
-        />
-      </View>
+    <View
+      style={[
+        styles.container,
+        { height, backgroundColor, borderRadius: height / 2 },
+        style,
+      ]}
+    >
+      <View
+        style={[
+          styles.progress,
+          {
+            width: `${Math.min(clampedProgress, 100)}%`,
+            backgroundColor: barColor,
+            borderRadius: height / 2,
+          },
+        ]}
+      />
     </View>
   );
 };
@@ -58,28 +48,10 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-  },
-  labelContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  percentage: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  track: {
-    borderRadius: 999,
     overflow: 'hidden',
   },
-  fill: {
+  progress: {
     height: '100%',
-    borderRadius: 999,
   },
 });
 

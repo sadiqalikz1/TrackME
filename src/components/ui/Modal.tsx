@@ -5,14 +5,13 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Pressable,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '@/contexts';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -21,7 +20,7 @@ interface ModalProps {
   onClose: () => void;
   title?: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'full';
+  size?: 'small' | 'medium' | 'large' | 'full';
   showCloseButton?: boolean;
   footer?: ReactNode;
 }
@@ -31,22 +30,22 @@ export const Modal: React.FC<ModalProps> = ({
   onClose,
   title,
   children,
-  size = 'md',
+  size = 'medium',
   showCloseButton = true,
   footer,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   const getMaxHeight = (): number => {
     switch (size) {
-      case 'sm':
+      case 'small':
         return SCREEN_HEIGHT * 0.4;
-      case 'lg':
+      case 'large':
         return SCREEN_HEIGHT * 0.85;
       case 'full':
         return SCREEN_HEIGHT * 0.95;
       default:
-        return SCREEN_HEIGHT * 0.7;
+        return SCREEN_HEIGHT * 0.65;
     }
   };
 
@@ -56,81 +55,75 @@ export const Modal: React.FC<ModalProps> = ({
       transparent
       animationType="slide"
       onRequestClose={onClose}
-      statusBarTranslucent
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+        style={styles.overlay}
       >
-        <Pressable style={styles.overlay} onPress={onClose}>
-          <Pressable
-            style={[
-              styles.container,
-              {
-                backgroundColor: colors.card,
-                maxHeight: getMaxHeight(),
-              },
-              size === 'full' && styles.fullSize,
-            ]}
-            onPress={(e) => e.stopPropagation()}
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View
+          style={[
+            styles.container,
+            {
+              backgroundColor: colors.card,
+              maxHeight: getMaxHeight(),
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          {/* Header */}
+          {(title || showCloseButton) && (
+            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.title, { color: colors.text }]}>
+                {title || ''}
+              </Text>
+              {showCloseButton && (
+                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                  <Ionicons name="close" size={24} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Content */}
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
-            {/* Header */}
-            {(title || showCloseButton) && (
-              <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.title, { color: colors.text }]}>
-                  {title}
-                </Text>
-                {showCloseButton && (
-                  <TouchableOpacity
-                    onPress={onClose}
-                    style={[styles.closeButton, { backgroundColor: colors.cardSecondary }]}
-                  >
-                    <Ionicons name="close" size={20} color={colors.text} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
+            {children}
+          </ScrollView>
 
-            {/* Content */}
-            <ScrollView
-              style={styles.content}
-              contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {children}
-            </ScrollView>
-
-            {/* Footer */}
-            {footer && (
-              <View style={[styles.footer, { borderTopColor: colors.border }]}>
-                {footer}
-              </View>
-            )}
-          </Pressable>
-        </Pressable>
+          {/* Footer */}
+          {footer && (
+            <View style={[styles.footer, { borderTopColor: colors.border }]}>
+              {footer}
+            </View>
+          )}
+        </View>
       </KeyboardAvoidingView>
     </RNModal>
   );
 };
 
 const styles = StyleSheet.create({
-  keyboardView: {
-    flex: 1,
-  },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   container: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    overflow: 'hidden',
-  },
-  fullSize: {
-    borderRadius: 0,
-    flex: 1,
+    borderWidth: 1,
+    borderBottomWidth: 0,
   },
   header: {
     flexDirection: 'row',
@@ -146,20 +139,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 4,
   },
   content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   footer: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderTopWidth: 1,
   },
 });

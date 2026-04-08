@@ -1,88 +1,131 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, useAuth } from '@/contexts';
+import { Card } from '@/components/ui';
 
 interface MenuItem {
-  icon: keyof typeof Ionicons.glyphMap;
+  id: string;
+  icon: string;
   label: string;
+  description: string;
+  color: string;
   screen: string;
-  color?: string;
 }
+
+const menuItems: MenuItem[] = [
+  {
+    id: 'budgets',
+    icon: 'pie-chart',
+    label: 'Budgets',
+    description: 'Set and track spending limits',
+    color: '#6366f1',
+    screen: 'Budgets',
+  },
+  {
+    id: 'goals',
+    icon: 'flag',
+    label: 'Savings Goals',
+    description: 'Track your financial goals',
+    color: '#10b981',
+    screen: 'Goals',
+  },
+  {
+    id: 'analysis',
+    icon: 'analytics',
+    label: 'Analysis',
+    description: 'Financial insights and trends',
+    color: '#f59e0b',
+    screen: 'Analysis',
+  },
+  {
+    id: 'bills',
+    icon: 'calendar',
+    label: 'Bill Reminders',
+    description: 'Never miss a payment',
+    color: '#ef4444',
+    screen: 'BillReminders',
+  },
+  {
+    id: 'settings',
+    icon: 'settings',
+    label: 'Settings',
+    description: 'Customize your experience',
+    color: '#8b5cf6',
+    screen: 'Settings',
+  },
+];
 
 const MoreMenuScreen: React.FC = () => {
   const { colors } = useTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-
-  const menuItems: MenuItem[] = [
-    { icon: 'wallet-outline', label: 'Budgets', screen: 'Budgets', color: colors.warning },
-    { icon: 'flag-outline', label: 'Savings Goals', screen: 'Goals', color: colors.success },
-    { icon: 'bar-chart-outline', label: 'Analysis', screen: 'Analysis', color: colors.info },
-    { icon: 'alarm-outline', label: 'Bill Reminders', screen: 'BillReminders', color: colors.danger },
-    { icon: 'settings-outline', label: 'Settings', screen: 'Settings', color: colors.textSecondary },
-  ];
 
   const handleNavigate = (screen: string) => {
     navigation.navigate(screen as never);
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* User Profile Header */}
-        <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: colors.text }]}>More</Text>
+        </View>
+
+        {/* User Card */}
+        <Card style={styles.userCard}>
           <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
             <Text style={styles.avatarText}>
               {user?.displayName?.charAt(0).toUpperCase() || 'U'}
             </Text>
           </View>
-          <View style={styles.profileInfo}>
-            <Text style={[styles.profileName, { color: colors.text }]}>
+          <View style={styles.userInfo}>
+            <Text style={[styles.userName, { color: colors.text }]}>
               {user?.displayName || 'User'}
             </Text>
-            <Text style={[styles.profileEmail, { color: colors.textSecondary }]}>
-              {user?.email || ''}
+            <Text style={[styles.userEmail, { color: colors.textMuted }]}>
+              {user?.email}
             </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.editButton, { backgroundColor: colors.cardSecondary }]}
-            onPress={() => handleNavigate('Settings')}
-          >
-            <Ionicons name="create-outline" size={20} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </Card>
 
         {/* Menu Items */}
-        <View style={styles.menuSection}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>MENU</Text>
-          {menuItems.map((item, index) => (
+        <View style={styles.menuContainer}>
+          {menuItems.map((item) => (
             <TouchableOpacity
-              key={item.screen}
-              style={[styles.menuItem, { backgroundColor: colors.card }]}
+              key={item.id}
               onPress={() => handleNavigate(item.screen)}
+              style={[
+                styles.menuItem,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
               activeOpacity={0.7}
             >
-              <View style={[styles.menuIcon, { backgroundColor: (item.color || colors.primary) + '20' }]}>
-                <Ionicons name={item.icon} size={22} color={item.color || colors.primary} />
+              <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
+                <Ionicons name={item.icon as any} size={24} color={item.color} />
               </View>
-              <Text style={[styles.menuLabel, { color: colors.text }]}>{item.label}</Text>
+              <View style={styles.menuContent}>
+                <Text style={[styles.menuLabel, { color: colors.text }]}>{item.label}</Text>
+                <Text style={[styles.menuDescription, { color: colors.textMuted }]}>
+                  {item.description}
+                </Text>
+              </View>
               <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* App Info */}
-        <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: colors.textMuted }]}>
-            FinanceFlow v1.0.0
-          </Text>
-        </View>
+        <View style={styles.bottomPadding} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -90,14 +133,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    padding: 16,
+  scrollContent: {
+    paddingHorizontal: 16,
   },
-  profileCard: {
+  header: {
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  userCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
     marginBottom: 24,
   },
   avatar: {
@@ -110,63 +158,51 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#fff',
+    color: '#ffffff',
   },
-  profileInfo: {
+  userInfo: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: 16,
   },
-  profileName: {
+  userName: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 2,
   },
-  profileEmail: {
-    fontSize: 13,
+  userEmail: {
+    fontSize: 14,
+    marginTop: 2,
   },
-  editButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuSection: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginBottom: 12,
-    marginLeft: 4,
+  menuContainer: {
+    gap: 12,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 8,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuLabel: {
+  menuContent: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    marginLeft: 12,
+    marginLeft: 16,
   },
-  footer: {
-    alignItems: 'center',
-    paddingTop: 20,
+  menuLabel: {
+    fontSize: 16,
+    fontWeight: '600',
   },
-  footerText: {
-    fontSize: 12,
+  menuDescription: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  bottomPadding: {
+    height: 100,
   },
 });
 

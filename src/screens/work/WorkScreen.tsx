@@ -5,71 +5,53 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
   RefreshControl,
+  ScrollView,
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { useNotification } from '@/contexts/NotificationContext';
-import { Modal, Button, Input, EmptyState, ProgressBar } from '@/components/ui';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme, useAuth, useNotification } from '@/contexts';
+import { Card, Input, Modal, Button, EmptyState } from '@/components/ui';
 import { WorkCard } from '@/components/common';
-import { Work, WorkCategory, WorkStatus, WorkFormData } from '@/types';
-import { WORK_CATEGORIES, WORK_STATUS_OPTIONS, STATUS_COLORS } from '@/utils/constants';
-import { parseCurrencyInput, isValidAmount, calculateProfit } from '@/utils/formatters';
-import {
-  subscribeToCollection,
-  createDocument,
-  updateDocument,
-  deleteDocument,
-} from '@/services/firebase';
-import { where, orderBy, Timestamp } from 'firebase/firestore';
+import { Work, WorkCategory, WorkStatus } from '@/types';
+import { getUserWorks, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
+import { COLLECTIONS, WORK_CATEGORIES, STATUS_COLORS, PROGRESS_STEPS } from '@/utils/constants';
+import { parseCurrencyInput, isValidAmount, calculateProfit, formatCurrency } from '@/utils/formatters';
 
 const WorkScreen: React.FC = () => {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showSuccess, showError } = useNotification();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   const [works, setWorks] = useState<Work[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingWork, setEditingWork] = useState<Work | null>(null);
   const [statusFilter, setStatusFilter] = useState<WorkStatus | 'all'>('all');
 
-  // Form state
-  const [formData, setFormData] = useState<WorkFormData>({
-    title: '',
-    description: '',
-    category: 'other',
-    status: 'pending',
-    quotationAmount: '',
-    workingCost: '',
-    expenses: '',
-    startDate: new Date(),
-  });
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingWork, setEditingWork] = useState<Work | null>(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState<WorkCategory>('cctv');
+  const [status, setStatus] = useState<WorkStatus>('pending');
+  const [quotation, setQuotation] = useState('');
+  const [workingCost, setWorkingCost] = useState('');
+  const [expenses, setExpenses] = useState('');
   const [progress, setProgress] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = subscribeToCollection<Work>(
-      'works',
-      [where('uid', '==', user.uid), orderBy('createdAt', 'desc')],
-      (data) => {
-        setWorks(
-          data.map((w) => ({
-            ...w,
-            startDate: typeof (w.startDate as any)?.toDate === 'function' ? (w.startDate as any).toDate() : new Date(w.startDate),
-            endDate: typeof (w.endDate as any)?.toDate === 'function' ? (w.endDate as any).toDate() : undefined,
-            createdAt: typeof (w.createdAt as any)?.toDate === 'function' ? (w.createdAt as any).toDate() : new Date(),
-            updatedAt: typeof (w.updatedAt as any)?.toDate === 'function' ? (w.updatedAt as any).toDate() : new Date(),
-          }))
-        );
-        setIsLoading(false);
-      }
-    );
+    const unsubscribe = getUserWorks(user.uid, (data) => {
+      setWorks(data);
+      setLoading(false);
+    });
 
     return () => unsubscribe();
   }, [user]);
@@ -80,99 +62,95 @@ const WorkScreen: React.FC = () => {
   }, [works, statusFilter]);
 
   const stats = useMemo(() => {
-    const totalQuotation = works.reduce((sum, w) => sum + w.quotationAmount, 0);
-    const totalProfit = works
-      .filter((w) => w.status === 'completed')
-      .reduce((sum, w) => sum + w.profit, 0);
-    const activeCount = works.filter((w) => w.status === 'in-progress').length;
+    const activeCount = works.filter((w) => w.status !== 'completed' && w.status !== 'cancelled').length;
     const completedCount = works.filter((w) => w.status === 'completed').length;
-
-    return { totalQuotation, totalProfit, activeCount, completedCount };
+    return { activeCount, completedCount };
   }, [works]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000);
+  };
 
   const openAddModal = () => {
     setEditingWork(null);
-    setFormData({
-      title: '',
-      description: '',
-      category: 'other',
-      status: 'pending',
-      quotationAmount: '',
-      workingCost: '',
-      expenses: '',
-      startDate: new Date(),
-    });
+    setTitle('');
+    setDescription('');
+    setCategory('cctv');
+    setStatus('pending');
+    setQuotation('');
+    setWorkingCost('');
+    setExpenses('');
     setProgress(0);
     setModalVisible(true);
   };
 
   const openEditModal = (work: Work) => {
     setEditingWork(work);
-    setFormData({
-      title: work.title,
-      description: work.description,
-      category: work.category,
-      status: work.status,
-      quotationAmount: work.quotationAmount.toString(),
-      workingCost: work.workingCost.toString(),
-      expenses: work.expenses.toString(),
-      startDate: new Date(work.startDate),
-      endDate: work.endDate ? new Date(work.endDate) : undefined,
-    });
+    setTitle(work.title);
+    setDescription(work.description);
+    setCategory(work.category);
+    setStatus(work.status);
+    setQuotation(work.quotationAmount.toString());
+    setWorkingCost(work.workingCost.toString());
+    setExpenses(work.expenses.toString());
     setProgress(work.progress);
     setModalVisible(true);
   };
 
   const handleSave = async () => {
-    if (!user) return;
-
-    if (!formData.title.trim()) {
+    if (!title.trim()) {
       showError('Please enter a title');
       return;
     }
 
-    try {
-      const quotation = parseCurrencyInput(formData.quotationAmount) || 0;
-      const workingCost = parseCurrencyInput(formData.workingCost) || 0;
-      const expenses = parseCurrencyInput(formData.expenses) || 0;
-      const profit = calculateProfit(quotation, workingCost, expenses);
+    const parsedQuotation = parseCurrencyInput(quotation) || 0;
+    const parsedWorkingCost = parseCurrencyInput(workingCost) || 0;
+    const parsedExpenses = parseCurrencyInput(expenses) || 0;
+    const profit = calculateProfit(parsedQuotation, parsedWorkingCost, parsedExpenses);
 
+    setSaving(true);
+    try {
       const workData = {
-        uid: user.uid,
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        category: formData.category,
-        status: formData.status,
-        quotationAmount: quotation,
-        finalAmount: quotation,
-        workingCost,
-        expenses,
+        uid: user!.uid,
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        status,
+        quotationAmount: parsedQuotation,
+        finalAmount: parsedQuotation,
+        workingCost: parsedWorkingCost,
+        expenses: parsedExpenses,
         profit,
         progress,
         photos: editingWork?.photos || [],
         isProfitTransferred: editingWork?.isProfitTransferred || false,
-        startDate: Timestamp.fromDate(formData.startDate),
-        endDate: formData.status === 'completed' ? Timestamp.fromDate(new Date()) : null,
+        startDate: editingWork?.startDate || new Date(),
+        endDate: status === 'completed' ? new Date() : undefined,
       };
 
       if (editingWork) {
-        await updateDocument('works', editingWork.id, workData);
-        showSuccess('Work project updated');
+        await updateDocument(COLLECTIONS.WORKS, editingWork.id, workData);
+        showSuccess('Project updated');
       } else {
-        await createDocument('works', workData);
-        showSuccess('Work project created');
+        await createDocument(COLLECTIONS.WORKS, workData);
+        showSuccess('Project created');
       }
 
       setModalVisible(false);
-    } catch (error: any) {
-      showError(error.message || 'Failed to save work project');
+    } catch (error) {
+      showError('Failed to save project');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = (work: Work) => {
+  const handleDelete = () => {
+    if (!editingWork) return;
+
     Alert.alert(
-      'Delete Work Project',
-      `Are you sure you want to delete "${work.title}"?`,
+      'Delete Project',
+      'Are you sure you want to delete this project?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -180,10 +158,11 @@ const WorkScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDocument('works', work.id);
-              showSuccess('Work project deleted');
-            } catch (error: any) {
-              showError(error.message || 'Failed to delete');
+              await deleteDocument(COLLECTIONS.WORKS, editingWork.id);
+              showSuccess('Project deleted');
+              setModalVisible(false);
+            } catch (error) {
+              showError('Failed to delete project');
             }
           },
         },
@@ -191,82 +170,90 @@ const WorkScreen: React.FC = () => {
     );
   };
 
+  const openWorkDetail = (work: Work) => {
+    (navigation as any).navigate('WorkDetail', { workId: work.id });
+  };
+
+  const renderStatusFilter = (filterStatus: WorkStatus | 'all', label: string) => {
+    const isActive = statusFilter === filterStatus;
+    const statusColor = filterStatus !== 'all' ? STATUS_COLORS[filterStatus].color : colors.primary;
+
+    return (
+      <TouchableOpacity
+        onPress={() => setStatusFilter(filterStatus)}
+        style={[
+          styles.statusChip,
+          {
+            backgroundColor: isActive ? statusColor : colors.card,
+            borderColor: isActive ? statusColor : colors.border,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.statusChipText,
+            { color: isActive ? '#ffffff' : colors.text },
+          ]}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
-      {/* Stats Overview */}
-      <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.statValue, { color: colors.primary }]}>{stats.activeCount}</Text>
-          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.statValue, { color: colors.success }]}>{stats.completedCount}</Text>
-          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Completed</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={[styles.title, { color: colors.text }]}>Work Projects</Text>
+        <View style={styles.statsRow}>
+          <View style={[styles.statBadge, { backgroundColor: colors.primary + '20' }]}>
+            <Text style={[styles.statValue, { color: colors.primary }]}>{stats.activeCount}</Text>
+            <Text style={[styles.statLabel, { color: colors.primary }]}>Active</Text>
+          </View>
+          <View style={[styles.statBadge, { backgroundColor: colors.success + '20' }]}>
+            <Text style={[styles.statValue, { color: colors.success }]}>{stats.completedCount}</Text>
+            <Text style={[styles.statLabel, { color: colors.success }]}>Completed</Text>
+          </View>
         </View>
       </View>
 
       {/* Status Filter */}
-      <View style={styles.filterContainer}>
-        <FlatList
-          horizontal
-          data={[
-            { value: 'all', label: 'All' },
-            ...WORK_STATUS_OPTIONS,
-          ]}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                {
-                  backgroundColor:
-                    statusFilter === item.value
-                      ? colors.primary
-                      : colors.card,
-                },
-              ]}
-              onPress={() => setStatusFilter(item.value as WorkStatus | 'all')}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  { color: statusFilter === item.value ? '#fff' : colors.textSecondary },
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-          keyExtractor={(item) => item.value}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterList}
-        />
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterContainer}
+      >
+        {renderStatusFilter('all', 'All')}
+        {renderStatusFilter('pending', 'Pending')}
+        {renderStatusFilter('in-progress', 'In Progress')}
+        {renderStatusFilter('completed', 'Completed')}
+        {renderStatusFilter('cancelled', 'Cancelled')}
+      </ScrollView>
 
       {/* Work List */}
       <FlatList
         data={filteredWorks}
-        renderItem={({ item }) => (
-          <WorkCard work={item} onPress={() => openEditModal(item)} />
-        )}
         keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <WorkCard
+            work={item}
+            onPress={() => openWorkDetail(item)}
+            onLongPress={() => openEditModal(item)}
+          />
+        )}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              setTimeout(() => setRefreshing(false), 1000);
-            }}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
           <EmptyState
             icon="briefcase-outline"
-            title="No work projects"
-            description="Start tracking your professional projects"
-            action={<Button title="Add Project" onPress={openAddModal} />}
+            title="No Projects"
+            description="Start tracking your work projects"
+            actionLabel="Add Project"
+            onAction={openAddModal}
           />
         }
       />
@@ -275,9 +262,8 @@ const WorkScreen: React.FC = () => {
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
         onPress={openAddModal}
-        activeOpacity={0.8}
       >
-        <Ionicons name="add" size={28} color="#fff" />
+        <Ionicons name="add" size={28} color="#ffffff" />
       </TouchableOpacity>
 
       {/* Add/Edit Modal */}
@@ -285,159 +271,152 @@ const WorkScreen: React.FC = () => {
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         title={editingWork ? 'Edit Project' : 'New Project'}
-        size="lg"
+        size="large"
         footer={
           <View style={styles.modalFooter}>
             {editingWork && (
               <Button
                 title="Delete"
                 variant="danger"
-                onPress={() => {
-                  setModalVisible(false);
-                  handleDelete(editingWork);
-                }}
-                style={{ flex: 1 }}
+                onPress={handleDelete}
+                style={styles.deleteButton}
               />
             )}
             <Button
               title="Cancel"
-              variant="ghost"
+              variant="outline"
               onPress={() => setModalVisible(false)}
-              style={{ flex: 1 }}
+              style={styles.footerButton}
             />
-            <Button title="Save" onPress={handleSave} style={{ flex: 2 }} />
+            <Button
+              title={editingWork ? 'Update' : 'Create'}
+              onPress={handleSave}
+              loading={saving}
+              style={styles.footerButton}
+            />
           </View>
         }
       >
-        <Input
-          label="Title"
-          value={formData.title}
-          onChangeText={(text) => setFormData({ ...formData, title: text })}
-          placeholder="Project name..."
-          variant="filled"
-        />
-
+        <Input label="Title" value={title} onChangeText={setTitle} placeholder="Project title" />
         <Input
           label="Description"
-          value={formData.description}
-          onChangeText={(text) => setFormData({ ...formData, description: text })}
-          placeholder="Brief description..."
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Project description"
           multiline
           numberOfLines={3}
-          variant="filled"
         />
 
-        {/* Category Selector */}
-        <Text style={[styles.label, { color: colors.text }]}>Category</Text>
+        {/* Category */}
+        <Text style={[styles.label, { color: colors.textSecondary }]}>Category</Text>
         <View style={styles.categoryGrid}>
-          {Object.entries(WORK_CATEGORIES).map(([key, { label, color }]) => (
+          {Object.entries(WORK_CATEGORIES).map(([key, cat]) => (
             <TouchableOpacity
               key={key}
+              onPress={() => setCategory(key as WorkCategory)}
               style={[
                 styles.categoryChip,
                 {
-                  backgroundColor: formData.category === key ? color : colors.card,
-                  borderColor: color,
+                  backgroundColor: category === key ? cat.color : colors.inputBackground,
+                  borderColor: category === key ? cat.color : colors.border,
                 },
               ]}
-              onPress={() => setFormData({ ...formData, category: key as WorkCategory })}
+            >
+              <Ionicons
+                name={cat.icon as any}
+                size={18}
+                color={category === key ? '#ffffff' : cat.color}
+              />
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  { color: category === key ? '#ffffff' : colors.text },
+                ]}
+              >
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Status */}
+        <Text style={[styles.label, { color: colors.textSecondary }]}>Status</Text>
+        <View style={styles.statusGrid}>
+          {Object.entries(STATUS_COLORS).map(([key, stat]) => (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setStatus(key as WorkStatus)}
+              style={[
+                styles.categoryChip,
+                {
+                  backgroundColor: status === key ? stat.color : colors.inputBackground,
+                  borderColor: status === key ? stat.color : colors.border,
+                },
+              ]}
             >
               <Text
                 style={[
                   styles.categoryChipText,
-                  { color: formData.category === key ? '#fff' : color },
+                  { color: status === key ? '#ffffff' : colors.text },
                 ]}
               >
-                {label.split(' ')[0]}
+                {stat.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Status Selector */}
-        <Text style={[styles.label, { color: colors.text }]}>Status</Text>
-        <View style={styles.statusGrid}>
-          {WORK_STATUS_OPTIONS.map(({ value, label }) => (
-            <TouchableOpacity
-              key={value}
-              style={[
-                styles.statusChip,
-                {
-                  backgroundColor:
-                    formData.status === value ? STATUS_COLORS[value as WorkStatus] : colors.card,
-                },
-              ]}
-              onPress={() => setFormData({ ...formData, status: value as WorkStatus })}
-            >
-              <Text
-                style={[
-                  styles.statusChipText,
-                  { color: formData.status === value ? '#fff' : colors.textSecondary },
-                ]}
-              >
-                {label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Financial Inputs */}
-        <View style={styles.row}>
-          <Input
-            label="Quotation"
-            value={formData.quotationAmount}
-            onChangeText={(text) => setFormData({ ...formData, quotationAmount: text })}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-            containerStyle={{ flex: 1 }}
-            variant="filled"
-          />
-          <View style={{ width: 12 }} />
-          <Input
-            label="Working Cost"
-            value={formData.workingCost}
-            onChangeText={(text) => setFormData({ ...formData, workingCost: text })}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-            containerStyle={{ flex: 1 }}
-            variant="filled"
-          />
-        </View>
-
+        {/* Financial */}
         <Input
-          label="Expenses"
-          value={formData.expenses}
-          onChangeText={(text) => setFormData({ ...formData, expenses: text })}
-          keyboardType="decimal-pad"
+          label="Quotation Amount"
+          value={quotation}
+          onChangeText={setQuotation}
           placeholder="0.00"
-          variant="filled"
+          keyboardType="decimal-pad"
+        />
+        <Input
+          label="Working Cost"
+          value={workingCost}
+          onChangeText={setWorkingCost}
+          placeholder="0.00"
+          keyboardType="decimal-pad"
+        />
+        <Input
+          label="Additional Expenses"
+          value={expenses}
+          onChangeText={setExpenses}
+          placeholder="0.00"
+          keyboardType="decimal-pad"
         />
 
-        {/* Progress Slider */}
-        <Text style={[styles.label, { color: colors.text }]}>Progress: {progress}%</Text>
-        <ProgressBar progress={progress} />
+        {/* Progress */}
+        <Text style={[styles.label, { color: colors.textSecondary }]}>Progress</Text>
         <View style={styles.progressButtons}>
-          {[0, 25, 50, 75, 100].map((val) => (
+          {PROGRESS_STEPS.map((step) => (
             <TouchableOpacity
-              key={val}
+              key={step}
+              onPress={() => setProgress(step)}
               style={[
                 styles.progressButton,
                 {
-                  backgroundColor: progress === val ? colors.primary : colors.card,
+                  backgroundColor: progress === step ? colors.primary : colors.inputBackground,
+                  borderColor: progress === step ? colors.primary : colors.border,
                 },
               ]}
-              onPress={() => setProgress(val)}
             >
               <Text
-                style={{ color: progress === val ? '#fff' : colors.textSecondary, fontSize: 12 }}
+                style={[
+                  styles.progressButtonText,
+                  { color: progress === step ? '#ffffff' : colors.text },
+                ]}
               >
-                {val}%
+                {step}%
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -445,66 +424,79 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  statsContainer: {
-    flexDirection: 'row',
+  header: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    gap: 12,
+    paddingBottom: 16,
   },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  statBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
   },
   statValue: {
-    fontSize: 28,
+    fontSize: 16,
     fontWeight: '700',
   },
   statLabel: {
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: '500',
   },
   filterContainer: {
-    paddingVertical: 12,
-  },
-  filterList: {
     paddingHorizontal: 16,
+    paddingBottom: 12,
     gap: 8,
   },
-  filterChip: {
+  statusChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 20,
+    borderWidth: 1,
     marginRight: 8,
   },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
+  statusChipText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   listContent: {
     padding: 16,
-    paddingTop: 0,
-    flexGrow: 1,
+    paddingBottom: 100,
   },
   fab: {
     position: 'absolute',
-    right: 20,
-    bottom: 20,
+    right: 16,
+    bottom: 100,
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#6366f1',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 4,
     elevation: 8,
   },
   modalFooter: {
     flexDirection: 'row',
     gap: 12,
+  },
+  footerButton: {
+    flex: 1,
+  },
+  deleteButton: {
+    flex: 0.5,
   },
   label: {
     fontSize: 14,
@@ -519,43 +511,39 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
+    gap: 6,
   },
   categoryChipText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   statusGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  progressButtons: {
     flexDirection: 'row',
     gap: 8,
     marginBottom: 16,
   },
-  statusChip: {
+  progressButton: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
+    borderWidth: 1,
     alignItems: 'center',
   },
-  statusChipText: {
-    fontSize: 12,
+  progressButtonText: {
+    fontSize: 14,
     fontWeight: '600',
-  },
-  row: {
-    flexDirection: 'row',
-  },
-  progressButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  progressButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
   },
 });
 

@@ -1,29 +1,48 @@
 import React from 'react';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, useAuth } from '@/contexts';
+import { RootStackParamList } from '@/types';
 
-// Screens
+// Auth Screens
 import LoginScreen from '@/screens/auth/LoginScreen';
+
+// Main Screens
 import DashboardScreen from '@/screens/dashboard/DashboardScreen';
 import TransactionsScreen from '@/screens/transactions/TransactionsScreen';
 import WorkScreen from '@/screens/work/WorkScreen';
 import WorkDetailScreen from '@/screens/work/WorkDetailScreen';
+import MoreMenuScreen from '@/screens/more/MoreMenuScreen';
 import BudgetsScreen from '@/screens/budgets/BudgetsScreen';
 import GoalsScreen from '@/screens/goals/GoalsScreen';
 import AnalysisScreen from '@/screens/analysis/AnalysisScreen';
 import SettingsScreen from '@/screens/settings/SettingsScreen';
 import BillRemindersScreen from '@/screens/settings/BillRemindersScreen';
-import MoreMenuScreen from '@/screens/more/MoreMenuScreen';
 
-import { RootStackParamList, MainTabParamList, MoreStackParamList } from '@/types';
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator();
+const MoreStack = createNativeStackNavigator();
+const WorkStack = createNativeStackNavigator();
 
-const RootStack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<MainTabParamList>();
-const MoreStack = createNativeStackNavigator<MoreStackParamList>();
+// Work Stack Navigator
+const WorkStackNavigator = () => {
+  const { colors } = useTheme();
+  
+  return (
+    <WorkStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
+      <WorkStack.Screen name="WorkMain" component={WorkScreen} />
+      <WorkStack.Screen name="WorkDetail" component={WorkDetailScreen} />
+    </WorkStack.Navigator>
+  );
+};
 
 // More Stack Navigator
 const MoreStackNavigator = () => {
@@ -32,90 +51,57 @@ const MoreStackNavigator = () => {
   return (
     <MoreStack.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.text,
-        headerTitleStyle: { fontWeight: '600' },
+        headerShown: false,
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <MoreStack.Screen
-        name="MoreMenu"
-        component={MoreMenuScreen}
-        options={{ headerShown: false }}
-      />
-      <MoreStack.Screen
-        name="Budgets"
-        component={BudgetsScreen}
-        options={{ title: 'Budgets' }}
-      />
-      <MoreStack.Screen
-        name="Goals"
-        component={GoalsScreen}
-        options={{ title: 'Savings Goals' }}
-      />
-      <MoreStack.Screen
-        name="Analysis"
-        component={AnalysisScreen}
-        options={{ title: 'Analysis' }}
-      />
-      <MoreStack.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{ title: 'Settings' }}
-      />
-      <MoreStack.Screen
-        name="BillReminders"
-        component={BillRemindersScreen}
-        options={{ title: 'Bill Reminders' }}
-      />
+      <MoreStack.Screen name="MoreMenu" component={MoreMenuScreen} />
+      <MoreStack.Screen name="Budgets" component={BudgetsScreen} />
+      <MoreStack.Screen name="Goals" component={GoalsScreen} />
+      <MoreStack.Screen name="Analysis" component={AnalysisScreen} />
+      <MoreStack.Screen name="Settings" component={SettingsScreen} />
+      <MoreStack.Screen name="BillReminders" component={BillRemindersScreen} />
     </MoreStack.Navigator>
   );
 };
 
-// Custom Add Button Component
-const AddButton: React.FC<{ onPress: () => void }> = ({ onPress }) => {
+// Custom Tab Bar Button for Add Transaction
+const AddTabButton: React.FC<{ onPress: () => void }> = ({ onPress }) => {
   const { colors } = useTheme();
 
   return (
     <TouchableOpacity
-      style={[styles.addButton, { backgroundColor: colors.primary }]}
       onPress={onPress}
-      activeOpacity={0.8}
+      style={[styles.addButton, { backgroundColor: colors.primary }]}
     >
-      <Ionicons name="add" size={32} color="#fff" />
+      <Ionicons name="add" size={32} color="#ffffff" />
     </TouchableOpacity>
   );
 };
 
-// Tab Navigator
-const TabNavigator = () => {
-  const { colors, isDark } = useTheme();
+// Main Tab Navigator
+const MainTabNavigator = () => {
+  const { colors } = useTheme();
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
+        headerShown: false,
         tabBarStyle: {
           backgroundColor: colors.tabBarBackground,
           borderTopColor: colors.border,
-          height: 65,
-          paddingBottom: 8,
-          paddingTop: 8,
+          height: 70,
+          paddingBottom: 10,
+          paddingTop: 10,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.tabBarInactive,
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-        },
-        headerStyle: {
-          backgroundColor: colors.background,
-        },
-        headerTintColor: colors.text,
-        headerTitleStyle: {
-          fontWeight: '600',
+          fontSize: 12,
+          fontWeight: '500',
         },
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap;
+          let iconName: string = 'home';
 
           switch (route.name) {
             case 'Dashboard':
@@ -124,90 +110,73 @@ const TabNavigator = () => {
             case 'Transactions':
               iconName = focused ? 'list' : 'list-outline';
               break;
-            case 'AddTransaction':
-              iconName = 'add-circle';
-              break;
             case 'Work':
               iconName = focused ? 'briefcase' : 'briefcase-outline';
               break;
             case 'More':
               iconName = focused ? 'grid' : 'grid-outline';
               break;
-            default:
-              iconName = 'ellipse';
           }
 
-          return <Ionicons name={iconName} size={24} color={color} />;
+          return <Ionicons name={iconName as any} size={size} color={color} />;
         },
       })}
     >
-      <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{ headerShown: false }}
-      />
-      <Tab.Screen
-        name="Transactions"
-        component={TransactionsScreen}
-        options={{ title: 'Transactions' }}
-      />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Transactions" component={TransactionsScreen} />
       <Tab.Screen
         name="AddTransaction"
-        component={DashboardScreen}
+        component={View}
         options={{
           tabBarLabel: '',
           tabBarButton: (props) => (
-            <AddButton onPress={() => {
-              // This will be handled by the screen to show add modal
-              if (props.onPress) {
-                props.onPress({} as any);
-              }
+            <AddTabButton onPress={() => {
+              // Navigate to transactions and open add modal
+              // This is handled in TransactionsScreen
             }} />
           ),
         }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
             e.preventDefault();
-            // Navigate to transactions with add modal flag
             navigation.navigate('Transactions', { openAddModal: true });
           },
         })}
       />
-      <Tab.Screen
-        name="Work"
-        component={WorkScreen}
-        options={{ title: 'Work Projects' }}
-      />
-      <Tab.Screen
-        name="More"
-        component={MoreStackNavigator}
-        options={{ headerShown: false }}
-      />
+      <Tab.Screen name="Work" component={WorkStackNavigator} />
+      <Tab.Screen name="More" component={MoreStackNavigator} />
     </Tab.Navigator>
   );
 };
 
 // Root Navigator
-export const RootNavigator = () => {
-  const { user, isLoading } = useAuth();
+export const RootNavigator: React.FC = () => {
   const { colors } = useTheme();
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
       <View style={[styles.loading, { backgroundColor: colors.background }]}>
-        {/* Add splash screen or loading indicator */}
+        {/* Loading screen */}
       </View>
     );
   }
 
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
-        <RootStack.Screen name="Main" component={TabNavigator} />
-      ) : (
-        <RootStack.Screen name="Auth" component={LoginScreen} />
-      )}
-    </RootStack.Navigator>
+    <NavigationContainer>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
+        {isAuthenticated ? (
+          <Stack.Screen name="Main" component={MainTabNavigator} />
+        ) : (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 };
 
@@ -223,11 +192,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -20,
-    shadowColor: '#6366f1',
+    marginTop: -28,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 4,
     elevation: 8,
   },
 });

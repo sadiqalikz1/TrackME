@@ -1,9 +1,9 @@
-// User types
+// User Types
 export interface User {
   uid: string;
   email: string;
-  displayName: string;
-  photoURL?: string;
+  displayName: string | null;
+  photoURL: string | null;
   currency: Currency;
   theme: 'light' | 'dark';
   budgetAlertThreshold: number;
@@ -12,7 +12,16 @@ export interface User {
   updatedAt: Date;
 }
 
-// Transaction types
+// Currency Types
+export type Currency = 'USD' | 'EUR' | 'GBP' | 'INR' | 'JPY' | 'LKR';
+
+export interface CurrencyInfo {
+  code: Currency;
+  symbol: string;
+  name: string;
+}
+
+// Transaction Types
 export type TransactionType = 'income' | 'expense';
 
 export type TransactionCategory =
@@ -25,6 +34,7 @@ export type TransactionCategory =
   | 'salary'
   | 'investment'
   | 'bills'
+  | 'utilities'
   | 'other';
 
 export interface Transaction {
@@ -33,15 +43,16 @@ export interface Transaction {
   amount: number;
   type: TransactionType;
   category: TransactionCategory;
+  description?: string;
   note: string;
-  date: Date;
+  date: string;
+  isRecurring: boolean;
+  recurringId?: string;
   createdAt: Date;
   updatedAt: Date;
-  isRecurring?: boolean;
-  recurringId?: string;
 }
 
-// Budget types
+// Budget Types
 export interface Budget {
   id: string;
   uid: string;
@@ -53,7 +64,7 @@ export interface Budget {
   updatedAt: Date;
 }
 
-// Work/Project types
+// Work Types
 export type WorkCategory =
   | 'cctv'
   | 'hardware'
@@ -86,21 +97,23 @@ export interface Work {
   updatedAt: Date;
 }
 
-// Savings Goal types
+// Goal Types
 export interface Goal {
   id: string;
   uid: string;
   name: string;
-  targetAmount: number;
-  currentAmount: number;
-  deadline: Date;
+  target: number;
+  saved: number;
+  deadline?: string;
   color: string;
+  isCompleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Recurring Transaction types
+// Recurring Transaction Types
 export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type BillFrequency = 'once' | 'weekly' | 'monthly' | 'yearly';
 
 export interface RecurringTransaction {
   id: string;
@@ -117,43 +130,31 @@ export interface RecurringTransaction {
   createdAt: Date;
 }
 
-// Bill Reminder types
+// Bill Reminder Types
 export interface BillReminder {
   id: string;
   uid: string;
-  title: string;
+  name: string;
   amount: number;
   category: TransactionCategory;
-  dueDate: Date;
-  frequency: RecurringFrequency;
+  dueDate: string;
+  frequency: BillFrequency;
   isPaid: boolean;
-  notificationEnabled: boolean;
-  notificationDaysBefore: number;
-  lastPaidDate?: Date;
+  isAutoPay: boolean;
+  notifyDaysBefore: number;
+  lastPaidDate?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Currency types
-export type Currency = 'USD' | 'EUR' | 'GBP' | 'INR' | 'JPY' | 'LKR';
-
-export interface CurrencyInfo {
-  code: Currency;
-  symbol: string;
-  name: string;
-}
-
-export interface ExchangeRates {
-  base: Currency;
-  rates: Record<Currency, number>;
-  lastUpdated: Date;
-}
-
-// Chart data types
+// Chart Types
 export interface ChartData {
-  label: string;
-  value: number;
-  color?: string;
+  labels: string[];
+  datasets: {
+    data: number[];
+    color?: (opacity: number) => string;
+    strokeWidth?: number;
+  }[];
 }
 
 export interface MonthlyData {
@@ -163,7 +164,15 @@ export interface MonthlyData {
   savings: number;
 }
 
-// Notification types
+export interface CategoryData {
+  name: string;
+  amount: number;
+  color: string;
+  legendFontColor: string;
+  legendFontSize: number;
+}
+
+// Notification Types
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
 export interface Notification {
@@ -173,80 +182,46 @@ export interface Notification {
   duration?: number;
 }
 
-// Navigation types
+// Exchange Rate Types
+export interface ExchangeRates {
+  base: Currency;
+  date: string;
+  rates: Record<Currency, number>;
+}
+
+// Navigation Types
 export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
-  BiometricLock: undefined;
-};
-
-export type MainTabParamList = {
+  Login: undefined;
   Dashboard: undefined;
   Transactions: undefined;
-  AddTransaction: undefined;
   Work: undefined;
-  More: undefined;
-};
-
-export type MoreStackParamList = {
+  WorkDetail: { workId: string };
   MoreMenu: undefined;
   Budgets: undefined;
   Goals: undefined;
   Analysis: undefined;
   Settings: undefined;
-  Recurring: undefined;
   BillReminders: undefined;
 };
 
-// Sync types for offline mode
-export type SyncStatus = 'synced' | 'pending' | 'error';
-
-export interface SyncableEntity {
-  syncStatus: SyncStatus;
-  localId?: string;
-  lastSyncedAt?: Date;
-}
-
-// Form types
-export interface TransactionFormData {
-  amount: string;
-  type: TransactionType;
-  category: TransactionCategory;
-  note: string;
-  date: Date;
-}
-
-export interface WorkFormData {
-  title: string;
-  description: string;
-  category: WorkCategory;
-  status: WorkStatus;
-  quotationAmount: string;
-  workingCost: string;
-  expenses: string;
-  startDate: Date;
-  endDate?: Date;
-}
-
-export interface GoalFormData {
-  name: string;
-  targetAmount: string;
-  deadline: Date;
-  color: string;
-}
-
-export interface BudgetFormData {
-  category: TransactionCategory;
-  limit: string;
-  month: string;
-}
-
-export interface BillReminderFormData {
-  title: string;
-  amount: string;
-  category: TransactionCategory;
-  dueDate: Date;
-  frequency: RecurringFrequency;
-  notificationEnabled: boolean;
-  notificationDaysBefore: number;
+// Theme Types
+export interface ThemeColors {
+  background: string;
+  card: string;
+  text: string;
+  textSecondary: string;
+  textMuted: string;
+  primary: string;
+  primaryLight: string;
+  success: string;
+  warning: string;
+  danger: string;
+  info: string;
+  border: string;
+  borderLight: string;
+  inputBackground: string;
+  tabBarBackground: string;
+  tabBarInactive: string;
 }

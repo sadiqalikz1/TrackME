@@ -1,102 +1,77 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import React from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useNotification } from '@/contexts/NotificationContext';
-import { Notification, NotificationType } from '@/types';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNotification, useTheme } from '@/contexts';
+import { NotificationType } from '@/types';
 
-const getIconAndColor = (
-  type: NotificationType,
-  colors: any
-): { icon: keyof typeof Ionicons.glyphMap; color: string; bgColor: string } => {
+const getIconName = (type: NotificationType): string => {
   switch (type) {
     case 'success':
-      return { icon: 'checkmark-circle', color: '#fff', bgColor: colors.success };
+      return 'checkmark-circle';
     case 'error':
-      return { icon: 'close-circle', color: '#fff', bgColor: colors.danger };
+      return 'close-circle';
     case 'warning':
-      return { icon: 'warning', color: '#fff', bgColor: colors.warning };
+      return 'warning';
     case 'info':
+      return 'information-circle';
     default:
-      return { icon: 'information-circle', color: '#fff', bgColor: colors.info };
+      return 'information-circle';
   }
 };
 
-interface ToastItemProps {
-  notification: Notification;
-  onDismiss: (id: string) => void;
-}
-
-const ToastItem: React.FC<ToastItemProps> = ({ notification, onDismiss }) => {
-  const { colors } = useTheme();
-  const translateY = React.useRef(new Animated.Value(-100)).current;
-  const opacity = React.useRef(new Animated.Value(0)).current;
-
-  const { icon, color, bgColor } = getIconAndColor(notification.type, colors);
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  const handleDismiss = () => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -100,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onDismiss(notification.id);
-    });
-  };
-
-  return (
-    <Animated.View
-      style={[
-        styles.toast,
-        { backgroundColor: bgColor, transform: [{ translateY }], opacity },
-      ]}
-    >
-      <Ionicons name={icon} size={22} color={color} />
-      <Text style={[styles.message, { color }]} numberOfLines={2}>
-        {notification.message}
-      </Text>
-      <TouchableOpacity onPress={handleDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Ionicons name="close" size={20} color={color} />
-      </TouchableOpacity>
-    </Animated.View>
-  );
+const getBackgroundColor = (type: NotificationType): string => {
+  switch (type) {
+    case 'success':
+      return '#10b981';
+    case 'error':
+      return '#ef4444';
+    case 'warning':
+      return '#f59e0b';
+    case 'info':
+      return '#3b82f6';
+    default:
+      return '#3b82f6';
+  }
 };
 
 export const NotificationToast: React.FC = () => {
   const { notifications, dismissNotification } = useNotification();
+  const insets = useSafeAreaInsets();
 
   if (notifications.length === 0) return null;
 
   return (
-    <View style={styles.container}>
-      {notifications.slice(-3).map((notification) => (
-        <ToastItem
+    <View style={[styles.container, { top: insets.top + 10 }]}>
+      {notifications.slice(0, 3).map((notification, index) => (
+        <Animated.View
           key={notification.id}
-          notification={notification}
-          onDismiss={dismissNotification}
-        />
+          style={[
+            styles.toast,
+            { backgroundColor: getBackgroundColor(notification.type) },
+          ]}
+        >
+          <Ionicons
+            name={getIconName(notification.type) as any}
+            size={24}
+            color="#ffffff"
+          />
+          <Text style={styles.message} numberOfLines={2}>
+            {notification.message}
+          </Text>
+          <TouchableOpacity
+            onPress={() => dismissNotification(notification.id)}
+            style={styles.closeButton}
+          >
+            <Ionicons name="close" size={20} color="#ffffff" />
+          </TouchableOpacity>
+        </Animated.View>
       ))}
     </View>
   );
@@ -105,7 +80,6 @@ export const NotificationToast: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 50,
     left: 16,
     right: 16,
     zIndex: 9999,
@@ -114,20 +88,23 @@ const styles = StyleSheet.create({
   toast: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    padding: 16,
     borderRadius: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
     elevation: 5,
   },
   message: {
     flex: 1,
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: '500',
     marginHorizontal: 12,
+  },
+  closeButton: {
+    padding: 4,
   },
 });
 

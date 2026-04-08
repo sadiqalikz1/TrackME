@@ -3,108 +3,210 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useNotification } from '@/contexts/NotificationContext';
-import { Button } from '@/components/ui';
-
-// Note: For production, you'll need to configure Google Sign-In with expo-auth-session
-// or @react-native-google-signin/google-signin
-// This is a simplified version showing the UI
+import { useTheme, useNotification } from '@/contexts';
+import { Button, Input } from '@/components/ui';
+import { signInWithEmail, signUpWithEmail, resetPassword } from '@/services/firebase';
+import { isValidEmail } from '@/utils/formatters';
 
 const LoginScreen: React.FC = () => {
-  const { colors, isDark } = useTheme();
-  const { showError } = useNotification();
-  const [isLoading, setIsLoading] = useState(false);
+  const { colors } = useTheme();
+  const { showSuccess, showError } = useNotification();
+  
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    try {
-      // TODO: Implement actual Google Sign-In
-      // For now, show a placeholder message
-      Alert.alert(
-        'Setup Required',
-        'To enable Google Sign-In:\n\n1. Create a Firebase project\n2. Enable Google Auth\n3. Add google-services.json\n4. Configure your .env file\n\nSee README for details.',
-        [{ text: 'OK' }]
-      );
-    } catch (error: any) {
-      showError(error.message || 'Failed to sign in');
-    } finally {
-      setIsLoading(false);
+  const handleAuth = async () => {
+    if (!email || !password) {
+      showError('Please fill in all fields');
+      return;
     }
+
+    if (!isValidEmail(email)) {
+      showError('Please enter a valid email');
+      return;
+    }
+
+    if (!isLogin && password !== confirmPassword) {
+      showError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      showError('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (isLogin) {
+        await signInWithEmail(email, password);
+        showSuccess('Welcome back!');
+      } else {
+        await signUpWithEmail(email, password);
+        showSuccess('Account created successfully!');
+      }
+    } catch (error: any) {
+      let errorMessage = 'An error occurred';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password';
+      } else if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'An account already exists with this email';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak';
+      }
+      
+      showError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      showError('Please enter your email address');
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      showError('Please enter a valid email');
+      return;
+    }
+
+    Alert.alert(
+      'Reset Password',
+      `Send password reset email to ${email}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: async () => {
+            try {
+              await resetPassword(email);
+              showSuccess('Password reset email sent!');
+            } catch (error) {
+              showError('Failed to send reset email');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
     <LinearGradient
-      colors={isDark ? ['#0f0f1a', '#1a1a2e', '#16162a'] : ['#f8fafc', '#e0e7ff', '#c7d2fe']}
+      colors={[colors.background, colors.primaryLight]}
       style={styles.container}
     >
-      {/* Logo & Branding */}
-      <View style={styles.brandingContainer}>
-        <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
-          <Ionicons name="wallet" size={48} color="#fff" />
-        </View>
-        <Text style={[styles.appName, { color: colors.text }]}>FinanceFlow</Text>
-        <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-          Track expenses, manage budgets,{'\n'}achieve your financial goals
-        </Text>
-      </View>
-
-      {/* Features */}
-      <View style={styles.featuresContainer}>
-        {[
-          { icon: 'pie-chart', label: 'Expense Tracking' },
-          { icon: 'bar-chart', label: 'Budget Management' },
-          { icon: 'briefcase', label: 'Work Projects' },
-          { icon: 'trending-up', label: 'Savings Goals' },
-        ].map((feature, index) => (
-          <View key={index} style={styles.featureItem}>
-            <View style={[styles.featureIcon, { backgroundColor: colors.primary + '20' }]}>
-              <Ionicons name={feature.icon as any} size={20} color={colors.primary} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Logo Section */}
+          <View style={styles.logoSection}>
+            <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
+              <Ionicons name="wallet" size={48} color="#ffffff" />
             </View>
-            <Text style={[styles.featureLabel, { color: colors.textSecondary }]}>
-              {feature.label}
+            <Text style={[styles.appName, { color: colors.text }]}>TrackME</Text>
+            <Text style={[styles.tagline, { color: colors.textMuted }]}>
+              Track your finances, control your future
             </Text>
           </View>
-        ))}
-      </View>
 
-      {/* Sign In Button */}
-      <View style={styles.authContainer}>
-        <TouchableOpacity
-          style={[styles.googleButton, { backgroundColor: colors.card }]}
-          onPress={handleGoogleSignIn}
-          disabled={isLoading}
-          activeOpacity={0.8}
-        >
-          {isLoading ? (
-            <ActivityIndicator color={colors.text} />
-          ) : (
-            <>
-              <Image
-                source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
-                style={styles.googleIcon}
+          {/* Form Section */}
+          <View style={[styles.formContainer, { backgroundColor: colors.card }]}>
+            <Text style={[styles.formTitle, { color: colors.text }]}>
+              {isLogin ? 'Welcome Back' : 'Create Account'}
+            </Text>
+            
+            <Input
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Enter your email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textMuted} />}
+            />
+
+            <Input
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Enter your password"
+              secureTextEntry={!showPassword}
+              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />}
+              rightIcon={
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={colors.textMuted}
+                  />
+                </TouchableOpacity>
+              }
+            />
+
+            {!isLogin && (
+              <Input
+                label="Confirm Password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Confirm your password"
+                secureTextEntry={!showPassword}
+                leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />}
               />
-              <Text style={[styles.googleButtonText, { color: colors.text }]}>
-                Continue with Google
+            )}
+
+            {isLogin && (
+              <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotButton}>
+                <Text style={[styles.forgotText, { color: colors.primary }]}>
+                  Forgot Password?
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <Button
+              title={isLogin ? 'Sign In' : 'Sign Up'}
+              onPress={handleAuth}
+              loading={loading}
+              style={styles.authButton}
+            />
+
+            <View style={styles.switchContainer}>
+              <Text style={[styles.switchText, { color: colors.textMuted }]}>
+                {isLogin ? "Don't have an account?" : 'Already have an account?'}
               </Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <Text style={[styles.termsText, { color: colors.textMuted }]}>
-          By continuing, you agree to our Terms of Service{'\n'}and Privacy Policy
-        </Text>
-      </View>
-
-      {/* Version */}
-      <Text style={[styles.version, { color: colors.textMuted }]}>Version 1.0.0</Text>
+              <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
+                <Text style={[styles.switchLink, { color: colors.primary }]}>
+                  {isLogin ? ' Sign Up' : ' Sign In'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 };
@@ -112,100 +214,77 @@ const LoginScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 80,
-    paddingBottom: 40,
   },
-  brandingContainer: {
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  logoSection: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 32,
   },
   logoContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 28,
+    width: 100,
+    height: 100,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowRadius: 8,
+    elevation: 8,
   },
   appName: {
     fontSize: 32,
     fontWeight: '700',
-    marginBottom: 8,
+    marginTop: 16,
   },
   tagline: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
+    fontSize: 14,
+    marginTop: 8,
   },
-  featuresContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 16,
-    marginBottom: 48,
-  },
-  featureItem: {
-    alignItems: 'center',
-    width: '45%',
-    paddingVertical: 16,
-  },
-  featureIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  featureLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  authContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 14,
-    marginBottom: 16,
+  formContainer: {
+    borderRadius: 24,
+    padding: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  googleIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 12,
-  },
-  googleButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  termsText: {
-    fontSize: 12,
+  formTitle: {
+    fontSize: 24,
+    fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 18,
+    marginBottom: 24,
   },
-  version: {
-    position: 'absolute',
-    bottom: 20,
-    alignSelf: 'center',
-    fontSize: 12,
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 16,
+  },
+  forgotText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  authButton: {
+    marginTop: 8,
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 24,
+  },
+  switchText: {
+    fontSize: 14,
+  },
+  switchLink: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

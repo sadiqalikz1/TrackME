@@ -1,10 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    './src/**/*.{js,jsx,ts,tsx}',
-    './App.{js,jsx,ts,tsx}',
+    "./app/**/*.{js,jsx,ts,tsx}",
+    "./src/**/*.{js,jsx,ts,tsx}",
   ],
-  presets: [require('nativewind/preset')],
+  presets: [require("nativewind/preset")],
   theme: {
     extend: {
       colors: {
@@ -24,11 +24,13 @@ module.exports = {
           100: '#1e1e2e',
           200: '#1a1a2e',
           300: '#16162a',
-          400: '#0f0f1a',
+          400: '#12122a',
+          500: '#0f0f1a',
         },
         success: '#10b981',
         warning: '#f59e0b',
         danger: '#ef4444',
+        info: '#3b82f6',
       },
     },
   },

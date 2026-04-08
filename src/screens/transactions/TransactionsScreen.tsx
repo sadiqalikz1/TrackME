@@ -1,144 +1,124 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
-  TextInput,
   RefreshControl,
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { useNotification } from '@/contexts/NotificationContext';
-import { Card, Modal, Button, Input, CategoryPicker, EmptyState } from '@/components/ui';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme, useAuth, useNotification } from '@/contexts';
+import { Card, Input, Modal, Button, CategoryGrid, EmptyState } from '@/components/ui';
 import { TransactionItem } from '@/components/common';
-import { Transaction, TransactionType, TransactionCategory, TransactionFormData } from '@/types';
-import { formatDate, parseCurrencyInput, isValidAmount } from '@/utils/formatters';
-import { TRANSACTION_CATEGORIES } from '@/utils/constants';
-import {
-  subscribeToCollection,
-  createDocument,
-  updateDocument,
-  deleteDocument,
-} from '@/services/firebase';
-import { where, orderBy, Timestamp } from 'firebase/firestore';
+import { Transaction, TransactionCategory, TransactionType } from '@/types';
+import { getUserTransactions, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
+import { COLLECTIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/utils/constants';
+import { parseCurrencyInput, isValidAmount } from '@/utils/formatters';
+
+type FilterType = 'all' | 'income' | 'expense';
 
 const TransactionsScreen: React.FC = () => {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showSuccess, showError } = useNotification();
+  const insets = useSafeAreaInsets();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<TransactionType | 'all'>('all');
+  const [filterType, setFilterType] = useState<FilterType>('all');
+  
+  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-
-  // Form state
-  const [formData, setFormData] = useState<TransactionFormData>({
-    amount: '',
-    type: 'expense',
-    category: 'other',
-    note: '',
-    date: new Date(),
-  });
+  const [transactionType, setTransactionType] = useState<TransactionType>('expense');
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState<TransactionCategory>('food');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = subscribeToCollection<Transaction>(
-      'transactions',
-      [where('uid', '==', user.uid), orderBy('date', 'desc')],
-      (data) => {
-        setTransactions(
-          data.map((t) => ({
-            ...t,
-            date: typeof (t.date as any)?.toDate === 'function' ? (t.date as any).toDate() : new Date(t.date),
-            createdAt: typeof (t.createdAt as any)?.toDate === 'function' ? (t.createdAt as any).toDate() : new Date(),
-            updatedAt: typeof (t.updatedAt as any)?.toDate === 'function' ? (t.updatedAt as any).toDate() : new Date(),
-          }))
-        );
-        setIsLoading(false);
-      }
-    );
+    const unsubscribe = getUserTransactions(user.uid, (data) => {
+      setTransactions(data);
+      setLoading(false);
+    });
 
     return () => unsubscribe();
   }, [user]);
 
-  // Filtered transactions
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
+      const matchesType = filterType === 'all' || t.type === filterType;
       const matchesSearch =
         searchQuery === '' ||
         t.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        TRANSACTION_CATEGORIES[t.category]?.label.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesType = filterType === 'all' || t.type === filterType;
-
-      return matchesSearch && matchesType;
+        t.category.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesType && matchesSearch;
     });
-  }, [transactions, searchQuery, filterType]);
+  }, [transactions, filterType, searchQuery]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000);
+  };
 
   const openAddModal = () => {
     setEditingTransaction(null);
-    setFormData({
-      amount: '',
-      type: 'expense',
-      category: 'other',
-      note: '',
-      date: new Date(),
-    });
+    setTransactionType('expense');
+    setAmount('');
+    setCategory('food');
+    setNote('');
     setModalVisible(true);
   };
 
   const openEditModal = (transaction: Transaction) => {
     setEditingTransaction(transaction);
-    setFormData({
-      amount: transaction.amount.toString(),
-      type: transaction.type,
-      category: transaction.category,
-      note: transaction.note,
-      date: new Date(transaction.date),
-    });
+    setTransactionType(transaction.type);
+    setAmount(transaction.amount.toString());
+    setCategory(transaction.category);
+    setNote(transaction.note);
     setModalVisible(true);
   };
 
   const handleSave = async () => {
-    if (!user) return;
-
-    const amount = parseCurrencyInput(formData.amount);
-    if (!isValidAmount(formData.amount)) {
+    const parsedAmount = parseCurrencyInput(amount);
+    
+    if (!isValidAmount(parsedAmount)) {
       showError('Please enter a valid amount');
       return;
     }
 
+    setSaving(true);
     try {
       const transactionData = {
-        uid: user.uid,
-        amount,
-        type: formData.type,
-        category: formData.category,
-        note: formData.note.trim(),
-        date: Timestamp.fromDate(formData.date),
+        uid: user!.uid,
+        amount: parsedAmount,
+        type: transactionType,
+        category,
+        note,
+        date: new Date(),
+        isRecurring: false,
       };
 
       if (editingTransaction) {
-        await updateDocument('transactions', editingTransaction.id, transactionData);
+        await updateDocument(COLLECTIONS.TRANSACTIONS, editingTransaction.id, transactionData);
         showSuccess('Transaction updated');
       } else {
-        await createDocument('transactions', transactionData);
+        await createDocument(COLLECTIONS.TRANSACTIONS, transactionData);
         showSuccess('Transaction added');
       }
-
+      
       setModalVisible(false);
-    } catch (error: any) {
-      showError(error.message || 'Failed to save transaction');
+    } catch (error) {
+      showError('Failed to save transaction');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -153,10 +133,10 @@ const TransactionsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDocument('transactions', transaction.id);
+              await deleteDocument(COLLECTIONS.TRANSACTIONS, transaction.id);
               showSuccess('Transaction deleted');
-            } catch (error: any) {
-              showError(error.message || 'Failed to delete');
+            } catch (error) {
+              showError('Failed to delete transaction');
             }
           },
         },
@@ -164,69 +144,62 @@ const TransactionsScreen: React.FC = () => {
     );
   };
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
-
-  const renderTransaction = ({ item }: { item: Transaction }) => (
-    <TransactionItem
-      transaction={item}
-      onPress={() => openEditModal(item)}
-      onLongPress={() => handleDelete(item)}
-    />
+  const renderFilterButton = (type: FilterType, label: string) => (
+    <TouchableOpacity
+      onPress={() => setFilterType(type)}
+      style={[
+        styles.filterButton,
+        {
+          backgroundColor: filterType === type ? colors.primary : colors.card,
+          borderColor: filterType === type ? colors.primary : colors.border,
+        },
+      ]}
+    >
+      <Text
+        style={[
+          styles.filterText,
+          { color: filterType === type ? '#ffffff' : colors.text },
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
-      {/* Search & Filter */}
-      <View style={styles.filterContainer}>
-        <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-          <Ionicons name="search" size={20} color={colors.textMuted} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder="Search transactions..."
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery !== '' && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={[styles.title, { color: colors.text }]}>Transactions</Text>
+      </View>
 
-        <View style={styles.filterTabs}>
-          {(['all', 'income', 'expense'] as const).map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[
-                styles.filterTab,
-                {
-                  backgroundColor: filterType === type ? colors.primary : colors.card,
-                },
-              ]}
-              onPress={() => setFilterType(type)}
-            >
-              <Text
-                style={[
-                  styles.filterTabText,
-                  { color: filterType === type ? '#fff' : colors.textSecondary },
-                ]}
-              >
-                {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+      {/* Search & Filter */}
+      <View style={styles.searchContainer}>
+        <Input
+          placeholder="Search transactions..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          leftIcon={<Ionicons name="search" size={20} color={colors.textMuted} />}
+          containerStyle={styles.searchInput}
+        />
+        <View style={styles.filterRow}>
+          {renderFilterButton('all', 'All')}
+          {renderFilterButton('income', 'Income')}
+          {renderFilterButton('expense', 'Expense')}
         </View>
       </View>
 
       {/* Transaction List */}
       <FlatList
         data={filteredTransactions}
-        renderItem={renderTransaction}
         keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <TransactionItem
+            transaction={item}
+            onPress={() => openEditModal(item)}
+            onLongPress={() => handleDelete(item)}
+          />
+        )}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -235,13 +208,10 @@ const TransactionsScreen: React.FC = () => {
         ListEmptyComponent={
           <EmptyState
             icon="receipt-outline"
-            title="No transactions"
-            description={searchQuery ? 'Try a different search' : 'Add your first transaction'}
-            action={
-              !searchQuery && (
-                <Button title="Add Transaction" onPress={openAddModal} />
-              )
-            }
+            title="No Transactions"
+            description="Start tracking your income and expenses"
+            actionLabel="Add Transaction"
+            onAction={openAddModal}
           />
         }
       />
@@ -250,9 +220,8 @@ const TransactionsScreen: React.FC = () => {
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
         onPress={openAddModal}
-        activeOpacity={0.8}
       >
-        <Ionicons name="add" size={28} color="#fff" />
+        <Ionicons name="add" size={28} color="#ffffff" />
       </TouchableOpacity>
 
       {/* Add/Edit Modal */}
@@ -264,60 +233,70 @@ const TransactionsScreen: React.FC = () => {
           <View style={styles.modalFooter}>
             <Button
               title="Cancel"
-              variant="ghost"
+              variant="outline"
               onPress={() => setModalVisible(false)}
-              style={{ flex: 1 }}
+              style={styles.footerButton}
             />
-            <Button title="Save" onPress={handleSave} style={{ flex: 2 }} />
+            <Button
+              title={editingTransaction ? 'Update' : 'Add'}
+              onPress={handleSave}
+              loading={saving}
+              style={styles.footerButton}
+            />
           </View>
         }
       >
         {/* Type Toggle */}
         <View style={styles.typeToggle}>
           <TouchableOpacity
+            onPress={() => {
+              setTransactionType('expense');
+              setCategory('food');
+            }}
             style={[
               styles.typeButton,
               {
-                backgroundColor: formData.type === 'expense' ? colors.danger : colors.card,
-                borderColor: colors.danger,
+                backgroundColor: transactionType === 'expense' ? colors.danger : colors.card,
+                borderColor: transactionType === 'expense' ? colors.danger : colors.border,
               },
             ]}
-            onPress={() => setFormData({ ...formData, type: 'expense' })}
           >
             <Ionicons
               name="arrow-up"
-              size={18}
-              color={formData.type === 'expense' ? '#fff' : colors.danger}
+              size={20}
+              color={transactionType === 'expense' ? '#ffffff' : colors.text}
             />
             <Text
               style={[
-                styles.typeButtonText,
-                { color: formData.type === 'expense' ? '#fff' : colors.danger },
+                styles.typeText,
+                { color: transactionType === 'expense' ? '#ffffff' : colors.text },
               ]}
             >
               Expense
             </Text>
           </TouchableOpacity>
-
           <TouchableOpacity
+            onPress={() => {
+              setTransactionType('income');
+              setCategory('salary');
+            }}
             style={[
               styles.typeButton,
               {
-                backgroundColor: formData.type === 'income' ? colors.success : colors.card,
-                borderColor: colors.success,
+                backgroundColor: transactionType === 'income' ? colors.success : colors.card,
+                borderColor: transactionType === 'income' ? colors.success : colors.border,
               },
             ]}
-            onPress={() => setFormData({ ...formData, type: 'income' })}
           >
             <Ionicons
               name="arrow-down"
-              size={18}
-              color={formData.type === 'income' ? '#fff' : colors.success}
+              size={20}
+              color={transactionType === 'income' ? '#ffffff' : colors.text}
             />
             <Text
               style={[
-                styles.typeButtonText,
-                { color: formData.type === 'income' ? '#fff' : colors.success },
+                styles.typeText,
+                { color: transactionType === 'income' ? '#ffffff' : colors.text },
               ]}
             >
               Income
@@ -328,32 +307,32 @@ const TransactionsScreen: React.FC = () => {
         {/* Amount */}
         <Input
           label="Amount"
-          value={formData.amount}
-          onChangeText={(text) => setFormData({ ...formData, amount: text })}
-          keyboardType="decimal-pad"
+          value={amount}
+          onChangeText={setAmount}
           placeholder="0.00"
-          leftIcon="cash-outline"
-          variant="filled"
+          keyboardType="decimal-pad"
+          leftIcon={<Text style={{ color: colors.textMuted, fontSize: 18 }}>$</Text>}
         />
 
         {/* Category */}
-        <CategoryPicker
-          selectedCategory={formData.category}
-          onSelect={(category) => setFormData({ ...formData, category })}
-          showIncomeCategories={formData.type === 'income'}
+        <Text style={[styles.label, { color: colors.textSecondary }]}>Category</Text>
+        <CategoryGrid
+          type="transaction"
+          selected={category}
+          onSelect={(c) => setCategory(c as TransactionCategory)}
+          filter={transactionType}
         />
 
         {/* Note */}
         <Input
           label="Note (optional)"
-          value={formData.note}
-          onChangeText={(text) => setFormData({ ...formData, note: text })}
+          value={note}
+          onChangeText={setNote}
           placeholder="Add a note..."
-          leftIcon="create-outline"
-          variant="filled"
+          multiline
         />
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -361,61 +340,60 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  filterContainer: {
+  header: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
   },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   searchInput: {
-    flex: 1,
-    fontSize: 15,
-    marginLeft: 10,
+    marginBottom: 12,
   },
-  filterTabs: {
+  filterRow: {
     flexDirection: 'row',
     gap: 8,
   },
-  filterTab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
   },
-  filterTabText: {
+  filterText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   listContent: {
     padding: 16,
-    paddingTop: 0,
-    flexGrow: 1,
+    paddingBottom: 100,
   },
   fab: {
     position: 'absolute',
-    right: 20,
-    bottom: 20,
+    right: 16,
+    bottom: 100,
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#6366f1',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 4,
     elevation: 8,
   },
   modalFooter: {
     flexDirection: 'row',
     gap: 12,
+  },
+  footerButton: {
+    flex: 1,
   },
   typeToggle: {
     flexDirection: 'row',
@@ -429,12 +407,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 12,
-    borderWidth: 1.5,
+    borderWidth: 1,
     gap: 8,
   },
-  typeButtonText: {
-    fontSize: 15,
+  typeText: {
+    fontSize: 16,
     fontWeight: '600',
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
   },
 });
 

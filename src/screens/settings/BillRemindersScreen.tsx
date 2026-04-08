@@ -5,365 +5,452 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
   RefreshControl,
+  Alert,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { useNotification } from '@/contexts/NotificationContext';
-import { Card, Modal, Button, Input, EmptyState } from '@/components/ui';
-import { BillReminder, TransactionCategory, RecurringFrequency, BillReminderFormData } from '@/types';
-import { formatCurrency, formatDate, getDaysUntil } from '@/utils/formatters';
-import { TRANSACTION_CATEGORIES, FREQUENCY_OPTIONS, NOTIFICATION_DAYS_OPTIONS } from '@/utils/constants';
-import {
-  subscribeToCollection,
-  createDocument,
-  updateDocument,
-  deleteDocument,
-} from '@/services/firebase';
-import { where, orderBy, Timestamp } from 'firebase/firestore';
-import { addMonths } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme, useAuth, useNotification } from '@/contexts';
+import { Card, Modal, Button, Input, CategoryPicker, EmptyState } from '@/components/ui';
+import { BillReminder, TransactionCategory, BillFrequency, Transaction } from '@/types';
+import { getUserBillReminders, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
+import { COLLECTIONS, TRANSACTION_CATEGORIES } from '@/utils/constants';
+import { formatCurrency, formatDate, parseCurrencyInput, calculateDaysRemaining } from '@/utils/formatters';
+
+const FREQUENCIES: { value: BillFrequency; label: string }[] = [
+  { value: 'once', label: 'Once' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
+];
 
 const BillRemindersScreen: React.FC = () => {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showSuccess, showError } = useNotification();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
-  const [reminders, setReminders] = useState<BillReminder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [bills, setBills] = useState<BillReminder[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingReminder, setEditingReminder] = useState<BillReminder | null>(null);
+  const [editingBill, setEditingBill] = useState<BillReminder | null>(null);
+  const [name, setName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<TransactionCategory>('utilities');
+  const [selectedFrequency, setSelectedFrequency] = useState<BillFrequency>('monthly');
+  const [isAutoPay, setIsAutoPay] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const currency = user?.currency || 'USD';
-
-  const [formData, setFormData] = useState<BillReminderFormData>({
-    title: '',
-    amount: '',
-    category: 'bills',
-    dueDate: new Date(),
-    frequency: 'monthly',
-    notificationEnabled: true,
-    notificationDaysBefore: 1,
-  });
 
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = subscribeToCollection<BillReminder>(
-      'billReminders',
-      [where('uid', '==', user.uid), orderBy('dueDate', 'asc')],
-      (data) => {
-        setReminders(
-          data.map((r) => ({
-            ...r,
-            dueDate: typeof (r.dueDate as any)?.toDate === 'function' ? (r.dueDate as any).toDate() : new Date(r.dueDate),
-            lastPaidDate: typeof (r.lastPaidDate as any)?.toDate === 'function' ? (r.lastPaidDate as any).toDate() : undefined,
-            createdAt: typeof (r.createdAt as any)?.toDate === 'function' ? (r.createdAt as any).toDate() : new Date(),
-            updatedAt: typeof (r.updatedAt as any)?.toDate === 'function' ? (r.updatedAt as any).toDate() : new Date(),
-          }))
-        );
-        setIsLoading(false);
-      }
-    );
+    const unsub = getUserBillReminders(user.uid, (data) => {
+      // Sort by due date
+      const sorted = data.sort((a, b) => {
+        const daysA = calculateDaysRemaining(a.dueDate);
+        const daysB = calculateDaysRemaining(b.dueDate);
+        return daysA - daysB;
+      });
+      setBills(sorted);
+      setLoading(false);
+    });
 
-    return () => unsubscribe();
+    return unsub;
   }, [user]);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000);
+  };
+
   const openAddModal = () => {
-    setEditingReminder(null);
-    setFormData({
-      title: '',
-      amount: '',
-      category: 'bills',
-      dueDate: new Date(),
-      frequency: 'monthly',
-      notificationEnabled: true,
-      notificationDaysBefore: 1,
-    });
+    setEditingBill(null);
+    setName('');
+    setAmount('');
+    setDueDate(new Date().toISOString().split('T')[0]);
+    setSelectedCategory('utilities');
+    setSelectedFrequency('monthly');
+    setIsAutoPay(false);
     setModalVisible(true);
   };
 
-  const openEditModal = (reminder: BillReminder) => {
-    setEditingReminder(reminder);
-    setFormData({
-      title: reminder.title,
-      amount: reminder.amount.toString(),
-      category: reminder.category,
-      dueDate: new Date(reminder.dueDate),
-      frequency: reminder.frequency,
-      notificationEnabled: reminder.notificationEnabled,
-      notificationDaysBefore: reminder.notificationDaysBefore,
-    });
+  const openEditModal = (bill: BillReminder) => {
+    setEditingBill(bill);
+    setName(bill.name);
+    setAmount(bill.amount.toString());
+    setDueDate(bill.dueDate);
+    setSelectedCategory(bill.category);
+    setSelectedFrequency(bill.frequency);
+    setIsAutoPay(bill.isAutoPay);
     setModalVisible(true);
   };
 
   const handleSave = async () => {
-    if (!user) return;
-
-    if (!formData.title.trim()) {
-      showError('Please enter a title');
+    if (!name.trim()) {
+      showError('Please enter a bill name');
       return;
     }
 
-    const amount = parseFloat(formData.amount);
-    if (isNaN(amount) || amount <= 0) {
+    const parsedAmount = parseCurrencyInput(amount);
+    if (parsedAmount <= 0) {
       showError('Please enter a valid amount');
       return;
     }
 
+    if (!dueDate) {
+      showError('Please enter a due date');
+      return;
+    }
+
+    setSaving(true);
     try {
-      const reminderData = {
-        uid: user.uid,
-        title: formData.title.trim(),
-        amount,
-        category: formData.category,
-        dueDate: Timestamp.fromDate(formData.dueDate),
-        frequency: formData.frequency,
+      const billData = {
+        uid: user!.uid,
+        name: name.trim(),
+        amount: parsedAmount,
+        dueDate,
+        category: selectedCategory,
+        frequency: selectedFrequency,
+        isAutoPay,
         isPaid: false,
-        notificationEnabled: formData.notificationEnabled,
-        notificationDaysBefore: formData.notificationDaysBefore,
+        notifyDaysBefore: 3,
       };
 
-      if (editingReminder) {
-        await updateDocument('billReminders', editingReminder.id, reminderData);
-        showSuccess('Reminder updated');
+      if (editingBill) {
+        await updateDocument(COLLECTIONS.BILL_REMINDERS, editingBill.id, billData);
+        showSuccess('Bill updated');
       } else {
-        await createDocument('billReminders', reminderData);
+        await createDocument<BillReminder>(COLLECTIONS.BILL_REMINDERS, billData);
         showSuccess('Bill reminder created');
       }
 
       setModalVisible(false);
-    } catch (error: any) {
-      showError(error.message || 'Failed to save reminder');
+    } catch (error) {
+      showError('Failed to save bill');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleMarkAsPaid = async (reminder: BillReminder) => {
-    try {
-      // Calculate next due date based on frequency
-      const nextDueDate = (() => {
-        const current = new Date(reminder.dueDate);
-        switch (reminder.frequency) {
-          case 'daily':
-            current.setDate(current.getDate() + 1);
-            break;
-          case 'weekly':
-            current.setDate(current.getDate() + 7);
-            break;
-          case 'monthly':
-            current.setMonth(current.getMonth() + 1);
-            break;
-          case 'yearly':
-            current.setFullYear(current.getFullYear() + 1);
-            break;
-        }
-        return current;
-      })();
-
-      await updateDocument('billReminders', reminder.id, {
-        isPaid: false,
-        lastPaidDate: Timestamp.fromDate(new Date()),
-        dueDate: Timestamp.fromDate(nextDueDate),
-      });
-
-      // Create a transaction for the paid bill
-      await createDocument('transactions', {
-        uid: user?.uid,
-        amount: reminder.amount,
-        type: 'expense',
-        category: reminder.category,
-        note: `Bill payment: ${reminder.title}`,
-        date: Timestamp.fromDate(new Date()),
-      });
-
-      showSuccess('Bill marked as paid & transaction created');
-    } catch (error: any) {
-      showError(error.message || 'Failed to mark as paid');
-    }
-  };
-
-  const handleDelete = (reminder: BillReminder) => {
-    Alert.alert('Delete Reminder', 'Are you sure you want to delete this bill reminder?', [
+  const handleDelete = (bill: BillReminder) => {
+    Alert.alert('Delete Bill', `Delete "${bill.name}" reminder?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument('billReminders', reminder.id);
-            showSuccess('Reminder deleted');
-          } catch (error: any) {
-            showError(error.message || 'Failed to delete');
+            await deleteDocument(COLLECTIONS.BILL_REMINDERS, bill.id);
+            showSuccess('Bill reminder deleted');
+          } catch (error) {
+            showError('Failed to delete bill');
           }
         },
       },
     ]);
   };
 
-  const renderReminder = ({ item }: { item: BillReminder }) => {
-    const daysUntil = getDaysUntil(item.dueDate);
+  const markAsPaid = async (bill: BillReminder) => {
+    try {
+      // Calculate next due date based on frequency
+      let nextDueDate = new Date(bill.dueDate);
+      switch (bill.frequency) {
+        case 'weekly':
+          nextDueDate.setDate(nextDueDate.getDate() + 7);
+          break;
+        case 'monthly':
+          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+          break;
+        case 'yearly':
+          nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+          break;
+        case 'once':
+          // For one-time bills, mark as paid
+          await updateDocument(COLLECTIONS.BILL_REMINDERS, bill.id, { isPaid: true });
+          showSuccess('Bill marked as paid');
+          return;
+      }
+
+      // Create transaction for this payment
+      await createDocument<Transaction>(COLLECTIONS.TRANSACTIONS, {
+        uid: user!.uid,
+        type: 'expense',
+        amount: bill.amount,
+        category: bill.category,
+        note: `${bill.name} payment`,
+        date: new Date().toISOString().split('T')[0],
+        isRecurring: false,
+      });
+
+      // Update bill with next due date
+      await updateDocument(COLLECTIONS.BILL_REMINDERS, bill.id, {
+        dueDate: nextDueDate.toISOString().split('T')[0],
+        lastPaidDate: new Date().toISOString().split('T')[0],
+      });
+
+      showSuccess('Marked as paid & transaction recorded');
+    } catch (error) {
+      showError('Failed to process payment');
+    }
+  };
+
+  const renderBillItem = ({ item }: { item: BillReminder }) => {
+    const category = TRANSACTION_CATEGORIES[item.category];
+    const daysUntil = calculateDaysRemaining(item.dueDate);
     const isOverdue = daysUntil < 0;
     const isDueSoon = daysUntil <= 3 && daysUntil >= 0;
-    const categoryInfo = TRANSACTION_CATEGORIES[item.category];
+
+    const getStatusColor = () => {
+      if (item.isPaid) return colors.success;
+      if (isOverdue) return colors.danger;
+      if (isDueSoon) return colors.warning;
+      return colors.textMuted;
+    };
+
+    const getStatusText = () => {
+      if (item.isPaid) return 'Paid';
+      if (isOverdue) return `${Math.abs(daysUntil)} days overdue`;
+      if (daysUntil === 0) return 'Due today';
+      if (daysUntil === 1) return 'Due tomorrow';
+      return `Due in ${daysUntil} days`;
+    };
 
     return (
-      <Card
-        style={styles.reminderCard}
-        onPress={() => {
-          Alert.alert(item.title, 'What would you like to do?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Mark as Paid', onPress: () => handleMarkAsPaid(item) },
-            { text: 'Edit', onPress: () => openEditModal(item) },
-            { text: 'Delete', style: 'destructive', onPress: () => handleDelete(item) },
-          ]);
-        }}
+      <TouchableOpacity
+        onPress={() => openEditModal(item)}
+        onLongPress={() => handleDelete(item)}
+        style={[
+          styles.billItem,
+          {
+            backgroundColor: colors.card,
+            borderColor: isOverdue ? colors.danger : isDueSoon ? colors.warning : colors.border,
+            borderWidth: isOverdue || isDueSoon ? 1.5 : 1,
+          },
+        ]}
       >
-        <View style={styles.reminderHeader}>
-          <View style={[styles.categoryIcon, { backgroundColor: categoryInfo.color + '20' }]}>
-            <Ionicons name="calendar" size={20} color={categoryInfo.color} />
+        <View style={styles.billHeader}>
+          <View style={[styles.categoryIcon, { backgroundColor: category.color + '20' }]}>
+            <Ionicons name={category.icon as any} size={20} color={category.color} />
           </View>
-          <View style={styles.reminderInfo}>
-            <Text style={[styles.reminderTitle, { color: colors.text }]}>{item.title}</Text>
-            <Text style={[styles.reminderCategory, { color: colors.textSecondary }]}>
-              {categoryInfo.label}
-            </Text>
+          <View style={styles.billInfo}>
+            <Text style={[styles.billName, { color: colors.text }]}>{item.name}</Text>
+            <View style={styles.billMeta}>
+              <Text style={[styles.billFrequency, { color: colors.textMuted }]}>
+                {FREQUENCIES.find((f) => f.value === item.frequency)?.label}
+              </Text>
+              {item.isAutoPay && (
+                <View style={[styles.autoPayBadge, { backgroundColor: colors.success + '20' }]}>
+                  <Ionicons name="sync" size={10} color={colors.success} />
+                  <Text style={[styles.autoPayText, { color: colors.success }]}>Auto</Text>
+                </View>
+              )}
+            </View>
           </View>
-          <View style={styles.reminderAmount}>
-            <Text style={[styles.amount, { color: colors.text }]}>
-              {formatCurrency(item.amount, currency)}
-            </Text>
-            <Text
-              style={[
-                styles.dueDate,
-                {
-                  color: isOverdue ? colors.danger : isDueSoon ? colors.warning : colors.textMuted,
-                },
-              ]}
-            >
-              {isOverdue
-                ? `${Math.abs(daysUntil)}d overdue`
-                : daysUntil === 0
-                ? 'Due today'
-                : `${daysUntil}d left`}
-            </Text>
-          </View>
+          <Text style={[styles.billAmount, { color: colors.text }]}>
+            {formatCurrency(item.amount, currency)}
+          </Text>
         </View>
 
-        <View style={styles.reminderFooter}>
-          <View style={styles.frequencyBadge}>
-            <Ionicons name="repeat" size={14} color={colors.textMuted} />
-            <Text style={[styles.frequencyText, { color: colors.textMuted }]}>
-              {FREQUENCY_OPTIONS.find((f) => f.value === item.frequency)?.label}
-            </Text>
+        <View style={styles.billFooter}>
+          <View style={styles.dateContainer}>
+            <Ionicons name="calendar-outline" size={14} color={getStatusColor()} />
+            <Text style={[styles.dueText, { color: getStatusColor() }]}>{getStatusText()}</Text>
           </View>
-          {item.notificationEnabled && (
-            <View style={styles.notificationBadge}>
-              <Ionicons name="notifications" size={14} color={colors.primary} />
-            </View>
+
+          {!item.isPaid && (
+            <TouchableOpacity
+              style={[styles.markPaidBtn, { backgroundColor: colors.success }]}
+              onPress={() => markAsPaid(item)}
+            >
+              <Ionicons name="checkmark" size={16} color="#ffffff" />
+              <Text style={styles.markPaidText}>Mark Paid</Text>
+            </TouchableOpacity>
           )}
         </View>
-      </Card>
+      </TouchableOpacity>
     );
   };
 
+  // Stats
+  const activeBills = bills.filter((b) => !b.isPaid);
+  const totalUpcoming = activeBills.reduce((sum, b) => sum + b.amount, 0);
+  const dueSoon = activeBills.filter((b) => calculateDaysRemaining(b.dueDate) <= 7 && calculateDaysRemaining(b.dueDate) >= 0);
+  const overdue = activeBills.filter((b) => calculateDaysRemaining(b.dueDate) < 0);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: colors.text }]}>Bill Reminders</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      {/* Stats */}
+      {bills.length > 0 && (
+        <View style={styles.statsContainer}>
+          <Card style={[styles.statCard, { flex: 1 }]}>
+            <Text style={[styles.statValue, { color: colors.primary }]}>
+              {formatCurrency(totalUpcoming, currency)}
+            </Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Upcoming</Text>
+          </Card>
+          <Card style={styles.statCard}>
+            <Text style={[styles.statValue, { color: colors.warning }]}>{dueSoon.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Due Soon</Text>
+          </Card>
+          <Card style={styles.statCard}>
+            <Text style={[styles.statValue, { color: colors.danger }]}>{overdue.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Overdue</Text>
+          </Card>
+        </View>
+      )}
+
+      {/* Bills List */}
       <FlatList
-        data={reminders}
-        renderItem={renderReminder}
+        data={bills}
         keyExtractor={(item) => item.id}
+        renderItem={renderBillItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              setTimeout(() => setRefreshing(false), 1000);
-            }}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
           <EmptyState
             icon="alarm-outline"
-            title="No bill reminders"
-            description="Set up reminders for recurring bills"
-            action={<Button title="Add Reminder" onPress={openAddModal} />}
+            title="No Bill Reminders"
+            description="Add bills to track due dates and avoid late fees"
+            actionLabel="Add Bill"
+            onAction={openAddModal}
           />
         }
       />
 
+      {/* FAB */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
         onPress={openAddModal}
-        activeOpacity={0.8}
       >
-        <Ionicons name="add" size={28} color="#fff" />
+        <Ionicons name="add" size={28} color="#ffffff" />
       </TouchableOpacity>
 
+      {/* Add/Edit Modal */}
       <Modal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        title={editingReminder ? 'Edit Reminder' : 'New Bill Reminder'}
+        title={editingBill ? 'Edit Bill' : 'New Bill Reminder'}
         footer={
           <View style={styles.modalFooter}>
             <Button
               title="Cancel"
-              variant="ghost"
+              variant="outline"
               onPress={() => setModalVisible(false)}
-              style={{ flex: 1 }}
+              style={styles.footerButton}
             />
-            <Button title="Save" onPress={handleSave} style={{ flex: 2 }} />
+            <Button
+              title={editingBill ? 'Update' : 'Create'}
+              onPress={handleSave}
+              loading={saving}
+              style={styles.footerButton}
+            />
           </View>
         }
       >
-        <Input
-          label="Bill Title"
-          value={formData.title}
-          onChangeText={(text) => setFormData({ ...formData, title: text })}
-          placeholder="e.g., Electricity Bill"
-          variant="filled"
-        />
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Input
+            label="Bill Name"
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g., Electricity Bill"
+          />
 
-        <Input
-          label="Amount"
-          value={formData.amount}
-          onChangeText={(text) => setFormData({ ...formData, amount: text })}
-          keyboardType="decimal-pad"
-          placeholder="0.00"
-          leftIcon="cash-outline"
-          variant="filled"
-        />
+          <Input
+            label="Amount"
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="0.00"
+            keyboardType="decimal-pad"
+            leftIcon={<Text style={{ color: colors.textMuted, fontSize: 18 }}>$</Text>}
+          />
 
-        {/* Frequency */}
-        <Text style={[styles.label, { color: colors.text }]}>Frequency</Text>
-        <View style={styles.frequencyGrid}>
-          {FREQUENCY_OPTIONS.map(({ value, label }) => (
-            <TouchableOpacity
-              key={value}
+          <Input
+            label="Due Date"
+            value={dueDate}
+            onChangeText={setDueDate}
+            placeholder="YYYY-MM-DD"
+          />
+
+          <CategoryPicker
+            label="Category"
+            value={selectedCategory}
+            onChange={(cat) => setSelectedCategory(cat as TransactionCategory)}
+            type="expense"
+          />
+
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Frequency</Text>
+          <View style={styles.frequencyGrid}>
+            {FREQUENCIES.map((freq) => (
+              <TouchableOpacity
+                key={freq.value}
+                style={[
+                  styles.frequencyOption,
+                  {
+                    backgroundColor: selectedFrequency === freq.value ? colors.primary : colors.inputBackground,
+                    borderColor: selectedFrequency === freq.value ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => setSelectedFrequency(freq.value)}
+              >
+                <Text
+                  style={[
+                    styles.frequencyText,
+                    { color: selectedFrequency === freq.value ? '#ffffff' : colors.text },
+                  ]}
+                >
+                  {freq.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.autoPayRow, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+            onPress={() => setIsAutoPay(!isAutoPay)}
+          >
+            <View style={styles.autoPayLeft}>
+              <Ionicons name="sync" size={20} color={colors.primary} />
+              <View style={styles.autoPayInfo}>
+                <Text style={[styles.autoPayTitle, { color: colors.text }]}>Auto-Pay</Text>
+                <Text style={[styles.autoPayDesc, { color: colors.textMuted }]}>
+                  Bill is automatically paid
+                </Text>
+              </View>
+            </View>
+            <View
               style={[
-                styles.frequencyChip,
+                styles.checkbox,
                 {
-                  backgroundColor: formData.frequency === value ? colors.primary : colors.card,
+                  backgroundColor: isAutoPay ? colors.primary : 'transparent',
+                  borderColor: isAutoPay ? colors.primary : colors.border,
                 },
               ]}
-              onPress={() => setFormData({ ...formData, frequency: value as RecurringFrequency })}
             >
-              <Text
-                style={{
-                  color: formData.frequency === value ? '#fff' : colors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: '600',
-                }}
-              >
-                {label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              {isAutoPay && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+            </View>
+          </TouchableOpacity>
+        </ScrollView>
       </Modal>
     </View>
   );
@@ -373,80 +460,140 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    gap: 10,
+  },
+  statCard: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 11,
+    marginTop: 2,
+  },
   listContent: {
     padding: 16,
-    flexGrow: 1,
+    paddingBottom: 100,
   },
-  reminderCard: {
+  billItem: {
+    padding: 16,
+    borderRadius: 16,
     marginBottom: 12,
   },
-  reminderHeader: {
+  billHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   categoryIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  reminderInfo: {
+  billInfo: {
     flex: 1,
     marginLeft: 12,
   },
-  reminderTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  reminderCategory: {
-    fontSize: 13,
-  },
-  reminderAmount: {
-    alignItems: 'flex-end',
-  },
-  amount: {
+  billName: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
   },
-  dueDate: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  reminderFooter: {
+  billMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.05)',
+    gap: 8,
+    marginTop: 2,
   },
-  frequencyBadge: {
+  billFrequency: {
+    fontSize: 12,
+  },
+  autoPayBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  frequencyText: {
+  autoPayText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  billAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  billFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e0e0e0',
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dueText: {
     fontSize: 12,
+    fontWeight: '500',
   },
-  notificationBadge: {
-    marginLeft: 'auto',
+  markPaidBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 4,
+  },
+  markPaidText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   fab: {
     position: 'absolute',
-    right: 20,
-    bottom: 20,
+    right: 16,
+    bottom: 32,
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
     elevation: 8,
   },
   modalFooter: {
     flexDirection: 'row',
     gap: 12,
+  },
+  footerButton: {
+    flex: 1,
   },
   label: {
     fontSize: 14,
@@ -458,11 +605,46 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
-  frequencyChip: {
+  frequencyOption: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
+    borderWidth: 1,
+  },
+  frequencyText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  autoPayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  autoPayLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  autoPayInfo: {},
+  autoPayTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  autoPayDesc: {
+    fontSize: 11,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

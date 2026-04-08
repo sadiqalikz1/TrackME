@@ -1,98 +1,64 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  TextInput,
   View,
+  TextInput,
   Text,
   StyleSheet,
   TextInputProps,
   ViewStyle,
-  TouchableOpacity,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '@/contexts';
 
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
-  leftIcon?: keyof typeof Ionicons.glyphMap;
-  rightIcon?: keyof typeof Ionicons.glyphMap;
-  onRightIconPress?: () => void;
   containerStyle?: ViewStyle;
-  variant?: 'default' | 'filled';
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
 }
 
 export const Input: React.FC<InputProps> = ({
   label,
   error,
+  containerStyle,
   leftIcon,
   rightIcon,
-  onRightIconPress,
-  containerStyle,
-  variant = 'default',
-  secureTextEntry,
+  style,
   ...props
 }) => {
-  const { colors } = useTheme();
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-
-  const isPassword = secureTextEntry !== undefined;
+  const { colors, isDark } = useTheme();
 
   return (
     <View style={[styles.container, containerStyle]}>
       {label && (
-        <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>
+          {label}
+        </Text>
       )}
       <View
         style={[
           styles.inputContainer,
           {
-            backgroundColor: variant === 'filled' ? colors.inputBackground : 'transparent',
-            borderColor: error ? colors.danger : colors.inputBorder,
+            backgroundColor: colors.inputBackground,
+            borderColor: error ? colors.danger : colors.border,
           },
         ]}
       >
-        {leftIcon && (
-          <Ionicons
-            name={leftIcon}
-            size={20}
-            color={colors.textMuted}
-            style={styles.leftIcon}
-          />
-        )}
+        {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
         <TextInput
           style={[
             styles.input,
             {
               color: colors.text,
               paddingLeft: leftIcon ? 0 : 16,
-              paddingRight: rightIcon || isPassword ? 0 : 16,
+              paddingRight: rightIcon ? 0 : 16,
             },
+            style,
           ]}
           placeholderTextColor={colors.textMuted}
-          secureTextEntry={isPassword ? !isPasswordVisible : false}
           {...props}
         />
-        {isPassword && (
-          <TouchableOpacity
-            onPress={() => setIsPasswordVisible(!isPasswordVisible)}
-            style={styles.rightIcon}
-          >
-            <Ionicons
-              name={isPasswordVisible ? 'eye-off' : 'eye'}
-              size={20}
-              color={colors.textMuted}
-            />
-          </TouchableOpacity>
-        )}
-        {rightIcon && !isPassword && (
-          <TouchableOpacity
-            onPress={onRightIconPress}
-            style={styles.rightIcon}
-            disabled={!onRightIconPress}
-          >
-            <Ionicons name={rightIcon} size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
+        {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
       </View>
       {error && (
         <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>
@@ -113,22 +79,22 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
     borderRadius: 12,
-    minHeight: 48,
-  },
-  leftIcon: {
-    marginLeft: 16,
-    marginRight: 8,
-  },
-  rightIcon: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderWidth: 1,
+    minHeight: 50,
   },
   input: {
     flex: 1,
     fontSize: 16,
     paddingVertical: 12,
+  },
+  iconLeft: {
+    paddingLeft: 16,
+    paddingRight: 8,
+  },
+  iconRight: {
+    paddingRight: 16,
+    paddingLeft: 8,
   },
   error: {
     fontSize: 12,

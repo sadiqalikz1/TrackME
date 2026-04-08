@@ -5,78 +5,52 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { useNotification } from '@/contexts/NotificationContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Modal, Button, Input, ProgressBar, EmptyState } from '@/components/ui';
-import { Budget, TransactionCategory, BudgetFormData, Transaction } from '@/types';
-import { formatCurrency, getMonthKey, calculateProgress } from '@/utils/formatters';
-import { TRANSACTION_CATEGORIES } from '@/utils/constants';
-import {
-  subscribeToCollection,
-  createDocument,
-  updateDocument,
-  deleteDocument,
-} from '@/services/firebase';
-import { where, orderBy, Timestamp } from 'firebase/firestore';
-import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { Budget, Transaction, TransactionCategory } from '@/types';
+import { getUserBudgets, getUserTransactions, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
+import { COLLECTIONS, TRANSACTION_CATEGORIES, EXPENSE_CATEGORIES } from '@/utils/constants';
+import { formatCurrency, getMonthKey, parseCurrencyInput, formatPercentage } from '@/utils/formatters';
 
 const BudgetsScreen: React.FC = () => {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showSuccess, showError } = useNotification();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<TransactionCategory>('food');
+  const [limit, setLimit] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const currentMonth = getMonthKey();
   const currency = user?.currency || 'USD';
 
-  const [formData, setFormData] = useState<BudgetFormData>({
-    category: 'food',
-    limit: '',
-    month: currentMonth,
-  });
-
   useEffect(() => {
     if (!user) return;
 
-    const unsubBudgets = subscribeToCollection<Budget>(
-      'budgets',
-      [where('uid', '==', user.uid), where('month', '==', currentMonth)],
-      (data) => {
-        setBudgets(data);
-        setIsLoading(false);
-      }
-    );
+    const unsubBudgets = getUserBudgets(user.uid, (data) => {
+      setBudgets(data.filter((b) => b.month === currentMonth));
+      setLoading(false);
+    });
 
-    const monthStart = startOfMonth(new Date());
-    const monthEnd = endOfMonth(new Date());
-
-    const unsubTransactions = subscribeToCollection<Transaction>(
-      'transactions',
-      [where('uid', '==', user.uid), where('type', '==', 'expense')],
-      (data) => {
-        const monthTransactions = data.filter((t) => {
-          const date = typeof (t.date as any)?.toDate === 'function' ? (t.date as any).toDate() : new Date(t.date);
-          return date >= monthStart && date <= monthEnd;
-        });
-        setTransactions(
-          monthTransactions.map((t) => ({
-            ...t,
-            date: typeof (t.date as any)?.toDate === 'function' ? (t.date as any).toDate() : new Date(t.date),
-          }))
-        );
-      }
-    );
+    const unsubTransactions = getUserTransactions(user.uid, (data) => {
+      setTransactions(data);
+    });
 
     return () => {
       unsubBudgets();
@@ -84,91 +58,104 @@ const BudgetsScreen: React.FC = () => {
     };
   }, [user, currentMonth]);
 
-  // Calculate spent amount for each category
+  // Calculate spent amount per category
   const budgetsWithSpent = useMemo(() => {
     return budgets.map((budget) => {
       const spent = transactions
-        .filter((t) => t.category === budget.category)
+        .filter(
+          (t) =>
+            t.type === 'expense' &&
+            t.category === budget.category &&
+            getMonthKey(new Date(t.date)) === currentMonth
+        )
         .reduce((sum, t) => sum + t.amount, 0);
+
       return { ...budget, spent };
     });
-  }, [budgets, transactions]);
+  }, [budgets, transactions, currentMonth]);
+
+  // Overall stats
+  const stats = useMemo(() => {
+    const totalBudget = budgetsWithSpent.reduce((sum, b) => sum + b.limit, 0);
+    const totalSpent = budgetsWithSpent.reduce((sum, b) => sum + b.spent, 0);
+    const percentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+    return { totalBudget, totalSpent, percentage };
+  }, [budgetsWithSpent]);
 
   // Categories without budgets
-  const unusedCategories = useMemo(() => {
+  const availableCategories = useMemo(() => {
     const usedCategories = budgets.map((b) => b.category);
-    return (Object.keys(TRANSACTION_CATEGORIES) as TransactionCategory[]).filter(
-      (cat) => !usedCategories.includes(cat) && !['salary', 'investment'].includes(cat)
-    );
+    return EXPENSE_CATEGORIES.filter((c) => !usedCategories.includes(c));
   }, [budgets]);
 
-  const totalBudget = budgets.reduce((sum, b) => sum + b.limit, 0);
-  const totalSpent = budgetsWithSpent.reduce((sum, b) => sum + b.spent, 0);
-  const overallProgress = calculateProgress(totalSpent, totalBudget);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000);
+  };
 
   const openAddModal = () => {
+    if (availableCategories.length === 0) {
+      showError('All categories have budgets');
+      return;
+    }
     setEditingBudget(null);
-    setFormData({
-      category: unusedCategories[0] || 'other',
-      limit: '',
-      month: currentMonth,
-    });
+    setSelectedCategory(availableCategories[0]);
+    setLimit('');
     setModalVisible(true);
   };
 
-  const openEditModal = (budget: Budget) => {
+  const openEditModal = (budget: Budget & { spent: number }) => {
     setEditingBudget(budget);
-    setFormData({
-      category: budget.category,
-      limit: budget.limit.toString(),
-      month: budget.month,
-    });
+    setSelectedCategory(budget.category);
+    setLimit(budget.limit.toString());
     setModalVisible(true);
   };
 
   const handleSave = async () => {
-    if (!user) return;
-
-    const limit = parseFloat(formData.limit);
-    if (isNaN(limit) || limit <= 0) {
-      showError('Please enter a valid budget amount');
+    const parsedLimit = parseCurrencyInput(limit);
+    if (parsedLimit <= 0) {
+      showError('Please enter a valid budget limit');
       return;
     }
 
+    setSaving(true);
     try {
       const budgetData = {
-        uid: user.uid,
-        category: formData.category,
-        limit,
-        month: formData.month,
+        uid: user!.uid,
+        category: selectedCategory,
+        limit: parsedLimit,
+        spent: 0,
+        month: currentMonth,
       };
 
       if (editingBudget) {
-        await updateDocument('budgets', editingBudget.id, budgetData);
+        await updateDocument(COLLECTIONS.BUDGETS, editingBudget.id, { limit: parsedLimit });
         showSuccess('Budget updated');
       } else {
-        await createDocument('budgets', budgetData);
+        await createDocument(COLLECTIONS.BUDGETS, budgetData);
         showSuccess('Budget created');
       }
 
       setModalVisible(false);
-    } catch (error: any) {
-      showError(error.message || 'Failed to save budget');
+    } catch (error) {
+      showError('Failed to save budget');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = (budget: Budget) => {
-    Alert.alert('Delete Budget', 'Are you sure you want to delete this budget?', [
+    Alert.alert('Delete Budget', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument('budgets', budget.id);
+            await deleteDocument(COLLECTIONS.BUDGETS, budget.id);
             showSuccess('Budget deleted');
-          } catch (error: any) {
-            showError(error.message || 'Failed to delete');
+          } catch (error) {
+            showError('Failed to delete budget');
           }
         },
       },
@@ -176,49 +163,34 @@ const BudgetsScreen: React.FC = () => {
   };
 
   const renderBudgetItem = ({ item }: { item: Budget & { spent: number } }) => {
-    const categoryInfo = TRANSACTION_CATEGORIES[item.category];
-    const progress = calculateProgress(item.spent, item.limit);
-    const isOverBudget = item.spent > item.limit;
+    const category = TRANSACTION_CATEGORIES[item.category];
+    const percentage = item.limit > 0 ? (item.spent / item.limit) * 100 : 0;
+    const isOverBudget = percentage > 100;
 
     return (
       <TouchableOpacity
-        style={[styles.budgetCard, { backgroundColor: colors.card }]}
         onPress={() => openEditModal(item)}
         onLongPress={() => handleDelete(item)}
-        activeOpacity={0.7}
+        style={[styles.budgetItem, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
         <View style={styles.budgetHeader}>
-          <View style={[styles.categoryIcon, { backgroundColor: categoryInfo.color + '20' }]}>
-            <Text style={{ fontSize: 18 }}>{categoryInfo.icon}</Text>
+          <View style={[styles.categoryIcon, { backgroundColor: category.color + '20' }]}>
+            <Ionicons name={category.icon as any} size={20} color={category.color} />
           </View>
           <View style={styles.budgetInfo}>
-            <Text style={[styles.categoryName, { color: colors.text }]}>
-              {categoryInfo.label}
-            </Text>
-            <Text style={[styles.budgetAmount, { color: colors.textSecondary }]}>
+            <Text style={[styles.categoryName, { color: colors.text }]}>{category.label}</Text>
+            <Text style={[styles.budgetAmount, { color: colors.textMuted }]}>
               {formatCurrency(item.spent, currency)} / {formatCurrency(item.limit, currency)}
             </Text>
           </View>
-          <View
-            style={[
-              styles.percentBadge,
-              { backgroundColor: isOverBudget ? colors.danger + '20' : colors.primary + '20' },
-            ]}
-          >
-            <Text
-              style={[
-                styles.percentText,
-                { color: isOverBudget ? colors.danger : colors.primary },
-              ]}
-            >
-              {progress}%
-            </Text>
-          </View>
+          <Text style={[styles.percentage, { color: isOverBudget ? colors.danger : colors.primary }]}>
+            {formatPercentage(Math.min(percentage, 999), 0)}
+          </Text>
         </View>
         <ProgressBar
-          progress={progress}
-          color={isOverBudget ? colors.danger : categoryInfo.color}
-          height={6}
+          progress={percentage}
+          color={isOverBudget ? colors.danger : category.color}
+          showOverflow
         />
         {isOverBudget && (
           <Text style={[styles.overBudgetText, { color: colors.danger }]}>
@@ -231,64 +203,62 @@ const BudgetsScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: colors.text }]}>Budgets</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
       {/* Overview Card */}
       <Card style={styles.overviewCard}>
-        <Text style={[styles.overviewTitle, { color: colors.textSecondary }]}>
-          {format(new Date(), 'MMMM yyyy')} Budget
-        </Text>
-        <View style={styles.overviewRow}>
-          <View>
-            <Text style={[styles.overviewLabel, { color: colors.textMuted }]}>Spent</Text>
-            <Text style={[styles.overviewValue, { color: colors.text }]}>
-              {formatCurrency(totalSpent, currency)}
-            </Text>
-          </View>
-          <View style={styles.overviewDivider} />
-          <View>
-            <Text style={[styles.overviewLabel, { color: colors.textMuted }]}>Budget</Text>
-            <Text style={[styles.overviewValue, { color: colors.primary }]}>
-              {formatCurrency(totalBudget, currency)}
-            </Text>
-          </View>
+        <View style={styles.overviewHeader}>
+          <Text style={[styles.overviewLabel, { color: colors.textMuted }]}>Monthly Overview</Text>
+          <Text style={[styles.overviewPercentage, { color: stats.percentage > 100 ? colors.danger : colors.primary }]}>
+            {formatPercentage(stats.percentage, 0)}
+          </Text>
         </View>
-        <ProgressBar progress={overallProgress} showLabel label="Overall" />
+        <ProgressBar progress={stats.percentage} showOverflow />
+        <View style={styles.overviewStats}>
+          <Text style={[styles.overviewStat, { color: colors.text }]}>
+            Spent: {formatCurrency(stats.totalSpent, currency)}
+          </Text>
+          <Text style={[styles.overviewStat, { color: colors.textMuted }]}>
+            Budget: {formatCurrency(stats.totalBudget, currency)}
+          </Text>
+        </View>
       </Card>
 
       {/* Budget List */}
       <FlatList
         data={budgetsWithSpent}
-        renderItem={renderBudgetItem}
         keyExtractor={(item) => item.id}
+        renderItem={renderBudgetItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              setTimeout(() => setRefreshing(false), 1000);
-            }}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
           <EmptyState
-            icon="wallet-outline"
-            title="No budgets set"
-            description="Set monthly budgets for your spending categories"
-            action={<Button title="Add Budget" onPress={openAddModal} />}
+            icon="pie-chart-outline"
+            title="No Budgets"
+            description="Set spending limits for different categories"
+            actionLabel="Create Budget"
+            onAction={openAddModal}
           />
         }
       />
 
       {/* FAB */}
-      {unusedCategories.length > 0 && (
+      {availableCategories.length > 0 && (
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: colors.primary }]}
           onPress={openAddModal}
-          activeOpacity={0.8}
         >
-          <Ionicons name="add" size={28} color="#fff" />
+          <Ionicons name="add" size={28} color="#ffffff" />
         </TouchableOpacity>
       )}
 
@@ -296,46 +266,56 @@ const BudgetsScreen: React.FC = () => {
       <Modal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        title={editingBudget ? 'Edit Budget' : 'Add Budget'}
+        title={editingBudget ? 'Edit Budget' : 'New Budget'}
         footer={
           <View style={styles.modalFooter}>
             <Button
               title="Cancel"
-              variant="ghost"
+              variant="outline"
               onPress={() => setModalVisible(false)}
-              style={{ flex: 1 }}
+              style={styles.footerButton}
             />
-            <Button title="Save" onPress={handleSave} style={{ flex: 2 }} />
+            <Button
+              title={editingBudget ? 'Update' : 'Create'}
+              onPress={handleSave}
+              loading={saving}
+              style={styles.footerButton}
+            />
           </View>
         }
       >
         {/* Category Selector (only for new budgets) */}
         {!editingBudget && (
           <>
-            <Text style={[styles.label, { color: colors.text }]}>Category</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Category</Text>
             <View style={styles.categoryGrid}>
-              {unusedCategories.map((cat) => {
-                const info = TRANSACTION_CATEGORIES[cat];
+              {availableCategories.map((cat) => {
+                const category = TRANSACTION_CATEGORIES[cat];
+                const isSelected = selectedCategory === cat;
                 return (
                   <TouchableOpacity
                     key={cat}
+                    onPress={() => setSelectedCategory(cat)}
                     style={[
                       styles.categoryChip,
                       {
-                        backgroundColor: formData.category === cat ? info.color : colors.card,
-                        borderColor: info.color,
+                        backgroundColor: isSelected ? category.color : colors.inputBackground,
+                        borderColor: isSelected ? category.color : colors.border,
                       },
                     ]}
-                    onPress={() => setFormData({ ...formData, category: cat })}
                   >
+                    <Ionicons
+                      name={category.icon as any}
+                      size={18}
+                      color={isSelected ? '#ffffff' : category.color}
+                    />
                     <Text
-                      style={{
-                        color: formData.category === cat ? '#fff' : info.color,
-                        fontSize: 12,
-                        fontWeight: '600',
-                      }}
+                      style={[
+                        styles.categoryChipText,
+                        { color: isSelected ? '#ffffff' : colors.text },
+                      ]}
                     >
-                      {info.label.split(' ')[0]}
+                      {category.label}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -346,12 +326,11 @@ const BudgetsScreen: React.FC = () => {
 
         <Input
           label="Budget Limit"
-          value={formData.limit}
-          onChangeText={(text) => setFormData({ ...formData, limit: text })}
-          keyboardType="decimal-pad"
+          value={limit}
+          onChangeText={setLimit}
           placeholder="0.00"
-          leftIcon="cash-outline"
-          variant="filled"
+          keyboardType="decimal-pad"
+          leftIcon={<Text style={{ color: colors.textMuted, fontSize: 18 }}>$</Text>}
         />
       </Modal>
     </View>
@@ -362,40 +341,49 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  overviewCard: {
-    margin: 16,
-  },
-  overviewTitle: {
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  overviewRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  overviewLabel: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  overviewValue: {
-    fontSize: 22,
+  title: {
+    fontSize: 20,
     fontWeight: '700',
   },
-  overviewDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginHorizontal: 24,
+  overviewCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  overviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  overviewLabel: {
+    fontSize: 14,
+  },
+  overviewPercentage: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  overviewStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  overviewStat: {
+    fontSize: 14,
   },
   listContent: {
     padding: 16,
-    paddingTop: 0,
-    flexGrow: 1,
+    paddingBottom: 100,
   },
-  budgetCard: {
+  budgetItem: {
     padding: 16,
-    borderRadius: 14,
+    borderRadius: 16,
+    borderWidth: 1,
     marginBottom: 12,
   },
   budgetHeader: {
@@ -415,40 +403,43 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   categoryName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 2,
   },
   budgetAmount: {
     fontSize: 13,
+    marginTop: 2,
   },
-  percentBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  percentText: {
-    fontSize: 13,
+  percentage: {
+    fontSize: 16,
     fontWeight: '700',
   },
   overBudgetText: {
     fontSize: 12,
     marginTop: 8,
+    fontWeight: '500',
   },
   fab: {
     position: 'absolute',
-    right: 20,
-    bottom: 20,
+    right: 16,
+    bottom: 32,
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
     elevation: 8,
   },
   modalFooter: {
     flexDirection: 'row',
     gap: 12,
+  },
+  footerButton: {
+    flex: 1,
   },
   label: {
     fontSize: 14,
@@ -462,10 +453,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
+    gap: 6,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
 

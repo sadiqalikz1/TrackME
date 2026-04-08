@@ -1,15 +1,16 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  initializeFirebase,
   onAuthChange,
   signOut as firebaseSignOut,
   getUserDocument,
   createUserDocument,
   updateUserDocument,
 } from '@/services/firebase';
-import { User, Currency } from '@/types';
-import { STORAGE_KEYS, DEFAULT_USER_SETTINGS } from '@/utils/constants';
+import { User } from '@/types';
+import { STORAGE_KEYS } from '@/utils/constants';
 
 interface AuthContextType {
   user: User | null;
@@ -23,6 +24,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
 interface AuthProviderProps {
   children: ReactNode;
 }
@@ -31,83 +40,96 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 5;
+
+  const loadCachedUser = async () => {
+    try {
+      const cached = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+      if (cached) {
+        const parsedUser = JSON.parse(cached);
+        // Convert date strings back to Date objects
+        parsedUser.createdAt = new Date(parsedUser.createdAt);
+        parsedUser.updatedAt = new Date(parsedUser.updatedAt);
+        setUser(parsedUser);
+      }
+    } catch (error) {
+      console.error('Error loading cached user:', error);
+    }
+  };
+
+  const cacheUser = async (userData: User | null) => {
+    try {
+      if (userData) {
+        await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
+      } else {
+        await AsyncStorage.removeItem(STORAGE_KEYS.USER);
+      }
+    } catch (error) {
+      console.error('Error caching user:', error);
+    }
+  };
+
+  const setupUser = async (fbUser: FirebaseUser): Promise<User | null> => {
+    try {
+      let userDoc = await getUserDocument(fbUser.uid);
+      
+      if (!userDoc) {
+        // Create new user document
+        const newUser: Partial<User> & { uid: string } = {
+          uid: fbUser.uid,
+          email: fbUser.email || '',
+          displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+          photoURL: fbUser.photoURL,
+          currency: 'USD',
+          theme: 'dark',
+          budgetAlertThreshold: 80,
+          biometricEnabled: false,
+        };
+        
+        await createUserDocument(newUser);
+        userDoc = await getUserDocument(fbUser.uid);
+      }
+      
+      return userDoc;
+    } catch (error) {
+      console.error('Error setting up user:', error);
+      if (retryCount < MAX_RETRIES) {
+        setRetryCount(prev => prev + 1);
+        // Retry after a delay
+        await new Promise<void>(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        return setupUser(fbUser);
+      }
+      throw error;
+    }
+  };
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    let retryCount = 0;
-    const maxRetries = 5;
-    
-    const setupAuthListener = async () => {
-      try {
-        // Small delay to ensure React Native is ready
-        await new Promise(resolve => setTimeout(resolve, 200 * (retryCount + 1)));
-        
-        unsubscribe = await onAuthChange(async (fbUser) => {
-          setFirebaseUser(fbUser);
+    initializeFirebase();
+    loadCachedUser();
 
-          if (fbUser) {
-            try {
-              // Try to get existing user document
-              let userData = await getUserDocument(fbUser.uid) as User | null;
-
-              if (!userData) {
-                // Create new user document
-                const newUser: Omit<User, 'createdAt' | 'updatedAt'> = {
-                  uid: fbUser.uid,
-                  email: fbUser.email || '',
-                  displayName: fbUser.displayName || 'User',
-                  photoURL: fbUser.photoURL || undefined,
-                  ...DEFAULT_USER_SETTINGS,
-                };
-
-                await createUserDocument(fbUser.uid, newUser);
-                userData = {
-                  ...newUser,
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                } as User;
-              }
-
-              setUser(userData);
-              await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userData));
-            } catch (error) {
-              console.error('Error loading user data:', error);
-              // Try to load from local storage as fallback
-              const cachedUser = await AsyncStorage.getItem(STORAGE_KEYS.user);
-              if (cachedUser) {
-                setUser(JSON.parse(cachedUser));
-              }
-            }
-          } else {
-            setUser(null);
-            await AsyncStorage.removeItem(STORAGE_KEYS.user);
-          }
-
-          setIsLoading(false);
-        });
-        
-        console.log('Auth listener setup successfully');
-      } catch (error) {
-        console.error(`Error setting up auth listener (attempt ${retryCount + 1}):`, error);
-        
-        // Retry up to maxRetries times
-        if (retryCount < maxRetries) {
-          retryCount++;
-          setTimeout(setupAuthListener, 500);
-        } else {
-          console.error('Max retries reached for auth listener setup');
-          setIsLoading(false);
+    const unsubscribe = onAuthChange(async (fbUser) => {
+      setFirebaseUser(fbUser);
+      
+      if (fbUser) {
+        try {
+          const userData = await setupUser(fbUser);
+          setUser(userData);
+          await cacheUser(userData);
+        } catch (error) {
+          console.error('Error in auth change handler:', error);
+          // Fall back to cached user if available
+          await loadCachedUser();
         }
+      } else {
+        setUser(null);
+        await cacheUser(null);
       }
-    };
+      
+      setIsLoading(false);
+    });
 
-    setupAuthListener();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
+    return () => unsubscribe();
   }, []);
 
   const signOut = async () => {
@@ -115,11 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await firebaseSignOut();
       setUser(null);
       setFirebaseUser(null);
-      await AsyncStorage.multiRemove([
-        STORAGE_KEYS.user,
-        STORAGE_KEYS.theme,
-        STORAGE_KEYS.currency,
-      ]);
+      await cacheUser(null);
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
@@ -127,38 +145,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const updateUser = async (data: Partial<User>) => {
-    if (!user || !firebaseUser) return;
-
+    if (!user) return;
+    
     try {
-      await updateUserDocument(firebaseUser.uid, data);
+      await updateUserDocument(user.uid, data);
       const updatedUser = { ...user, ...data, updatedAt: new Date() };
       setUser(updatedUser);
-      await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updatedUser));
+      await cacheUser(updatedUser);
     } catch (error) {
       console.error('Error updating user:', error);
       throw error;
     }
   };
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     if (!firebaseUser) return;
-
+    
     try {
-      const userData = await getUserDocument(firebaseUser.uid) as User | null;
+      const userData = await getUserDocument(firebaseUser.uid);
       if (userData) {
         setUser(userData);
-        await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userData));
+        await cacheUser(userData);
       }
     } catch (error) {
       console.error('Error refreshing user:', error);
     }
-  };
+  }, [firebaseUser]);
 
   const value: AuthContextType = {
     user,
     firebaseUser,
     isLoading,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && !!firebaseUser,
     signOut,
     updateUser,
     refreshUser,
@@ -167,10 +185,4 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export default AuthContext;

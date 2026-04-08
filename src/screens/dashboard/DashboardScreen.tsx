@@ -5,75 +5,45 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  Dimensions,
   TouchableOpacity,
+  Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { PieChart, BarChart } from 'react-native-chart-kit';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { Card, SkeletonCard } from '@/components/ui';
+import { PieChart } from 'react-native-chart-kit';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme, useAuth } from '@/contexts';
+import { Card, SkeletonList } from '@/components/ui';
 import { TransactionItem, GoalCard } from '@/components/common';
-import { formatCurrency, formatCompactCurrency, getMonthKey, formatDate } from '@/utils/formatters';
-import { TRANSACTION_CATEGORIES, CHART_COLORS } from '@/utils/constants';
-import { Transaction, Goal, TransactionCategory } from '@/types';
-import {
-  subscribeToCollection,
-  getUserTransactions,
-  getUserGoals,
-} from '@/services/firebase';
-import { where, orderBy } from 'firebase/firestore';
-import { startOfMonth, endOfMonth } from 'date-fns';
+import { Transaction, Goal, CategoryData } from '@/types';
+import { getUserTransactions, getUserGoals } from '@/services/firebase';
+import { TRANSACTION_CATEGORIES } from '@/utils/constants';
+import { formatCurrency, getMonthRange, formatDate } from '@/utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 64;
 
 const DashboardScreen: React.FC = () => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  const currency = user?.currency || 'USD';
 
   useEffect(() => {
     if (!user) return;
 
-    const currentMonth = new Date();
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(currentMonth);
+    const unsubTransactions = getUserTransactions(user.uid, (data) => {
+      setTransactions(data);
+      setLoading(false);
+    });
 
-    // Subscribe to transactions
-    const unsubTransactions = subscribeToCollection<Transaction>(
-      'transactions',
-      [where('uid', '==', user.uid), orderBy('date', 'desc')],
-      (data) => {
-        setTransactions(data.map(t => ({
-          ...t,
-          date: typeof (t.date as any)?.toDate === 'function' ? (t.date as any).toDate() : new Date(t.date),
-          createdAt: typeof (t.createdAt as any)?.toDate === 'function' ? (t.createdAt as any).toDate() : new Date(),
-          updatedAt: typeof (t.updatedAt as any)?.toDate === 'function' ? (t.updatedAt as any).toDate() : new Date(),
-        })));
-        setIsLoading(false);
-      }
-    );
-
-    // Subscribe to goals
-    const unsubGoals = subscribeToCollection<Goal>(
-      'goals',
-      [where('uid', '==', user.uid), orderBy('deadline', 'asc')],
-      (data) => {
-        setGoals(data.map(g => ({
-          ...g,
-          deadline: typeof (g.deadline as any)?.toDate === 'function' ? (g.deadline as any).toDate() : new Date(g.deadline),
-          createdAt: typeof (g.createdAt as any)?.toDate === 'function' ? (g.createdAt as any).toDate() : new Date(),
-          updatedAt: typeof (g.updatedAt as any)?.toDate === 'function' ? (g.updatedAt as any).toDate() : new Date(),
-        })));
-      }
-    );
+    const unsubGoals = getUserGoals(user.uid, (data) => {
+      setGoals(data);
+    });
 
     return () => {
       unsubTransactions();
@@ -81,147 +51,119 @@ const DashboardScreen: React.FC = () => {
     };
   }, [user]);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // Data will be refreshed via subscriptions
+    setTimeout(() => setRefreshing(false), 1000);
+  };
+
   // Calculate monthly stats
   const monthlyStats = useMemo(() => {
-    const currentMonth = getMonthKey();
-    const monthTransactions = transactions.filter(
-      t => getMonthKey(new Date(t.date)) === currentMonth
-    );
+    const { start, end } = getMonthRange();
+    const monthlyTransactions = transactions.filter((t) => {
+      const date = new Date(t.date);
+      return date >= start && date <= end;
+    });
 
-    const income = monthTransactions
-      .filter(t => t.type === 'income')
+    const income = monthlyTransactions
+      .filter((t) => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const expense = monthTransactions
-      .filter(t => t.type === 'expense')
+    const expense = monthlyTransactions
+      .filter((t) => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    return {
-      income,
-      expense,
-      balance: income - expense,
-      transactionCount: monthTransactions.length,
-    };
+    return { income, expense, balance: income - expense };
   }, [transactions]);
 
-  // Category breakdown data
-  const categoryData = useMemo(() => {
-    const currentMonth = getMonthKey();
-    const expenses = transactions.filter(
-      t => t.type === 'expense' && getMonthKey(new Date(t.date)) === currentMonth
+  // Calculate category data for pie chart
+  const categoryData = useMemo((): CategoryData[] => {
+    const { start, end } = getMonthRange();
+    const monthlyExpenses = transactions.filter(
+      (t) => t.type === 'expense' && new Date(t.date) >= start && new Date(t.date) <= end
     );
 
     const categoryTotals: Record<string, number> = {};
-    expenses.forEach(t => {
+    monthlyExpenses.forEach((t) => {
       categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
     });
 
     return Object.entries(categoryTotals)
-      .map(([category, amount], index) => ({
-        name: TRANSACTION_CATEGORIES[category as TransactionCategory]?.label.split(' ')[0] || category,
+      .map(([category, amount]) => ({
+        name: TRANSACTION_CATEGORIES[category as keyof typeof TRANSACTION_CATEGORIES]?.label || category,
         amount,
-        color: CHART_COLORS[index % CHART_COLORS.length],
-        legendFontColor: colors.textSecondary,
+        color: TRANSACTION_CATEGORIES[category as keyof typeof TRANSACTION_CATEGORIES]?.color || '#6b7280',
+        legendFontColor: colors.text,
         legendFontSize: 12,
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5);
   }, [transactions, colors]);
 
-  // Recent transactions
-  const recentTransactions = useMemo(() => {
-    return transactions.slice(0, 5);
-  }, [transactions]);
+  const recentTransactions = transactions.slice(0, 5);
+  const activeGoals = goals.filter((g) => !g.isCompleted && g.saved < g.target).slice(0, 3);
+  const currency = user?.currency || 'USD';
 
-  // Active goals
-  const activeGoals = useMemo(() => {
-    return goals.filter(g => g.currentAmount < g.targetAmount).slice(0, 3);
-  }, [goals]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  };
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.header}>
-          <SkeletonCard lines={2} />
-        </View>
-        <SkeletonCard />
-        <SkeletonCard />
-      </SafeAreaView>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <SkeletonList count={4} style={styles.skeletonContainer} />
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.greeting, { color: colors.textSecondary }]}>
-              Welcome back,
+            <Text style={[styles.greeting, { color: colors.textMuted }]}>
+              Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}
             </Text>
             <Text style={[styles.userName, { color: colors.text }]}>
               {user?.displayName || 'User'}
             </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.profileButton, { backgroundColor: colors.card }]}
-          >
-            <Ionicons name="person" size={22} color={colors.primary} />
+          <TouchableOpacity style={[styles.profileButton, { backgroundColor: colors.card }]}>
+            <Ionicons name="person" size={24} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
         {/* Balance Card */}
-        <Card variant="elevated" style={styles.balanceCard}>
-          <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>
-            Monthly Balance
+        <Card style={styles.balanceCard}>
+          <Text style={[styles.balanceLabel, { color: colors.textMuted }]}>
+            {formatDate(new Date(), 'MMMM yyyy')} Balance
           </Text>
-          <Text
-            style={[
-              styles.balanceAmount,
-              { color: monthlyStats.balance >= 0 ? colors.success : colors.danger },
-            ]}
-          >
+          <Text style={[styles.balanceAmount, { color: colors.text }]}>
             {formatCurrency(monthlyStats.balance, currency)}
           </Text>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <View style={[styles.statIcon, { backgroundColor: colors.success + '20' }]}>
+          <View style={styles.balanceRow}>
+            <View style={styles.balanceItem}>
+              <View style={[styles.balanceIcon, { backgroundColor: colors.success + '20' }]}>
                 <Ionicons name="arrow-down" size={16} color={colors.success} />
               </View>
               <View>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Income</Text>
-                <Text style={[styles.statValue, { color: colors.success }]}>
-                  {formatCompactCurrency(monthlyStats.income, currency)}
+                <Text style={[styles.balanceItemLabel, { color: colors.textMuted }]}>Income</Text>
+                <Text style={[styles.balanceItemAmount, { color: colors.success }]}>
+                  {formatCurrency(monthlyStats.income, currency)}
                 </Text>
               </View>
             </View>
-
-            <View style={styles.statDivider} />
-
-            <View style={styles.statItem}>
-              <View style={[styles.statIcon, { backgroundColor: colors.danger + '20' }]}>
+            <View style={styles.balanceItem}>
+              <View style={[styles.balanceIcon, { backgroundColor: colors.danger + '20' }]}>
                 <Ionicons name="arrow-up" size={16} color={colors.danger} />
               </View>
               <View>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Expenses</Text>
-                <Text style={[styles.statValue, { color: colors.danger }]}>
-                  {formatCompactCurrency(monthlyStats.expense, currency)}
+                <Text style={[styles.balanceItemLabel, { color: colors.textMuted }]}>Expense</Text>
+                <Text style={[styles.balanceItemAmount, { color: colors.danger }]}>
+                  {formatCurrency(monthlyStats.expense, currency)}
                 </Text>
               </View>
             </View>
@@ -230,25 +172,23 @@ const DashboardScreen: React.FC = () => {
 
         {/* Spending by Category */}
         {categoryData.length > 0 && (
-          <View style={styles.section}>
+          <Card style={styles.chartCard}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Spending by Category
             </Text>
-            <Card>
-              <PieChart
-                data={categoryData}
-                width={CHART_WIDTH}
-                height={200}
-                chartConfig={{
-                  color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                }}
-                accessor="amount"
-                backgroundColor="transparent"
-                paddingLeft="15"
-                absolute
-              />
-            </Card>
-          </View>
+            <PieChart
+              data={categoryData}
+              width={SCREEN_WIDTH - 64}
+              height={180}
+              chartConfig={{
+                color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+              }}
+              accessor="amount"
+              backgroundColor="transparent"
+              paddingLeft="0"
+              absolute
+            />
+          </Card>
         )}
 
         {/* Recent Transactions */}
@@ -257,23 +197,19 @@ const DashboardScreen: React.FC = () => {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Recent Transactions
             </Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Transactions' as never)}>
               <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
             </TouchableOpacity>
           </View>
-
           {recentTransactions.length > 0 ? (
-            recentTransactions.map(transaction => (
+            recentTransactions.map((transaction) => (
               <TransactionItem key={transaction.id} transaction={transaction} />
             ))
           ) : (
             <Card>
-              <View style={styles.emptyState}>
-                <Ionicons name="receipt-outline" size={48} color={colors.textMuted} />
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No transactions yet
-                </Text>
-              </View>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                No transactions yet. Start by adding one!
+              </Text>
             </Card>
           )}
         </View>
@@ -285,21 +221,19 @@ const DashboardScreen: React.FC = () => {
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
                 Savings Goals
               </Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => (navigation as any).navigate('More', { screen: 'Goals' })}>
                 <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
               </TouchableOpacity>
             </View>
-
-            {activeGoals.map(goal => (
+            {activeGoals.map((goal) => (
               <GoalCard key={goal.id} goal={goal} />
             ))}
           </View>
         )}
 
-        {/* Bottom spacing */}
-        <View style={{ height: 20 }} />
+        <View style={styles.bottomPadding} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -308,26 +242,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    paddingHorizontal: 16,
+  },
+  skeletonContainer: {
     padding: 16,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   greeting: {
     fontSize: 14,
-    marginBottom: 2,
   },
   userName: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
+    marginTop: 4,
   },
   profileButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -336,43 +273,39 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     fontSize: 14,
-    marginBottom: 4,
   },
   balanceAmount: {
     fontSize: 36,
     fontWeight: '700',
-    marginBottom: 20,
+    marginTop: 8,
   },
-  statsRow: {
+  balanceRow: {
+    flexDirection: 'row',
+    marginTop: 20,
+    gap: 24,
+  },
+  balanceItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
-  statItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statIcon: {
+  balanceIcon: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
-  statLabel: {
+  balanceItemLabel: {
     fontSize: 12,
-    marginBottom: 2,
   },
-  statValue: {
+  balanceItemAmount: {
     fontSize: 16,
     fontWeight: '600',
+    marginTop: 2,
   },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginHorizontal: 16,
+  chartCard: {
+    marginBottom: 24,
   },
   section: {
     marginBottom: 24,
@@ -381,7 +314,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
@@ -391,13 +324,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
   emptyText: {
-    marginTop: 12,
+    textAlign: 'center',
     fontSize: 14,
+    paddingVertical: 8,
+  },
+  bottomPadding: {
+    height: 100,
   },
 });
 

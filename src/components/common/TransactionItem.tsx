@@ -1,11 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
-import { Transaction, TransactionType } from '@/types';
-import { formatCurrency, formatDate } from '@/utils/formatters';
+import { useTheme, useAuth } from '@/contexts';
+import { Transaction } from '@/types';
 import { TRANSACTION_CATEGORIES } from '@/utils/constants';
-import { useAuth } from '@/contexts/AuthContext';
+import { formatCurrency, formatRelativeDate } from '@/utils/formatters';
 
 interface TransactionItemProps {
   transaction: Transaction;
@@ -22,43 +21,45 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
   const { user } = useAuth();
   const category = TRANSACTION_CATEGORIES[transaction.category];
   const isIncome = transaction.type === 'income';
-
-  const getIconName = (icon: string): keyof typeof Ionicons.glyphMap => {
-    const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
-      restaurant: 'restaurant',
-      car: 'car',
-      home: 'home',
-      'shopping-bag': 'bag',
-      film: 'film',
-      heart: 'heart',
-      briefcase: 'briefcase',
-      'trending-up': 'trending-up',
-      'file-text': 'document-text',
-      'more-horizontal': 'ellipsis-horizontal',
-    };
-    return iconMap[icon] || 'ellipsis-horizontal';
-  };
+  const currency = user?.currency || 'USD';
 
   return (
     <TouchableOpacity
-      style={[styles.container, { backgroundColor: colors.card }]}
       onPress={onPress}
       onLongPress={onLongPress}
+      style={[
+        styles.container,
+        { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
       activeOpacity={0.7}
     >
-      <View style={[styles.iconContainer, { backgroundColor: category.color + '20' }]}>
-        <Ionicons name={getIconName(category.icon)} size={22} color={category.color} />
+      <View
+        style={[
+          styles.iconContainer,
+          { backgroundColor: category.color + '20' },
+        ]}
+      >
+        <Ionicons name={category.icon as any} size={24} color={category.color} />
       </View>
-      
+
       <View style={styles.content}>
-        <Text style={[styles.category, { color: colors.text }]} numberOfLines={1}>
+        <Text style={[styles.category, { color: colors.text }]}>
           {category.label}
         </Text>
-        <Text style={[styles.note, { color: colors.textSecondary }]} numberOfLines={1}>
-          {transaction.note || 'No note'}
-        </Text>
+        {transaction.note ? (
+          <Text
+            style={[styles.note, { color: colors.textMuted }]}
+            numberOfLines={1}
+          >
+            {transaction.note}
+          </Text>
+        ) : (
+          <Text style={[styles.date, { color: colors.textMuted }]}>
+            {formatRelativeDate(transaction.date)}
+          </Text>
+        )}
       </View>
-      
+
       <View style={styles.amountContainer}>
         <Text
           style={[
@@ -66,11 +67,14 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
             { color: isIncome ? colors.success : colors.danger },
           ]}
         >
-          {isIncome ? '+' : '-'}{formatCurrency(transaction.amount, user?.currency || 'USD')}
+          {isIncome ? '+' : '-'}
+          {formatCurrency(transaction.amount, currency)}
         </Text>
-        <Text style={[styles.date, { color: colors.textMuted }]}>
-          {formatDate(transaction.date, 'MMM dd')}
-        </Text>
+        {transaction.note && (
+          <Text style={[styles.date, { color: colors.textMuted, textAlign: 'right' }]}>
+            {formatRelativeDate(transaction.date)}
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -80,14 +84,15 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -96,23 +101,23 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   category: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 2,
   },
   note: {
-    fontSize: 13,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  date: {
+    fontSize: 12,
+    marginTop: 2,
   },
   amountContainer: {
     alignItems: 'flex-end',
   },
   amount: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 2,
-  },
-  date: {
-    fontSize: 12,
   },
 });
 

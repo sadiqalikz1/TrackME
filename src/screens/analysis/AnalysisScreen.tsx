@@ -1,152 +1,144 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, RefreshControl } from 'react-native';
-import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { Card } from '@/components/ui';
-import { Transaction, TransactionCategory, MonthlyData } from '@/types';
-import { formatCurrency, formatCompactCurrency, getMonthKey, getLast6Months } from '@/utils/formatters';
-import { TRANSACTION_CATEGORIES, CHART_COLORS } from '@/utils/constants';
-import { subscribeToCollection } from '@/services/firebase';
-import { where, orderBy } from 'firebase/firestore';
-import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+  RefreshControl,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { LineChart, PieChart, BarChart } from 'react-native-chart-kit';
+import { useTheme, useAuth } from '@/contexts';
+import { Card, Skeleton } from '@/components/ui';
+import { Transaction, TransactionCategory } from '@/types';
+import { getUserTransactions } from '@/services/firebase';
+import { TRANSACTION_CATEGORIES } from '@/utils/constants';
+import { formatCurrency, formatPercentage, getMonthName } from '@/utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 64;
+const CHART_WIDTH = SCREEN_WIDTH - 48;
+
+type TimeRange = '1M' | '3M' | '6M' | '1Y';
 
 const AnalysisScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [timeRange, setTimeRange] = useState<TimeRange>('6M');
 
   const currency = user?.currency || 'USD';
 
   useEffect(() => {
     if (!user) return;
 
-    const sixMonthsAgo = subMonths(new Date(), 6);
+    const unsub = getUserTransactions(user.uid, (data) => {
+      setTransactions(data);
+      setLoading(false);
+    });
 
-    const unsubscribe = subscribeToCollection<Transaction>(
-      'transactions',
-      [where('uid', '==', user.uid), orderBy('date', 'desc')],
-      (data) => {
-        const formattedData = data.map((t) => ({
-          ...t,
-          date: typeof (t.date as any)?.toDate === 'function' ? (t.date as any).toDate() : new Date(t.date),
-        }));
-        setTransactions(formattedData);
-        setIsLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
+    return unsub;
   }, [user]);
 
-  // Monthly data for last 6 months
-  const monthlyData = useMemo(() => {
-    const months = getLast6Months();
-    return months.map((month) => {
-      const monthKey = getMonthKey(month);
-      const monthTransactions = transactions.filter(
-        (t) => getMonthKey(new Date(t.date)) === monthKey
-      );
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000);
+  };
 
+  // Filter by time range
+  const filteredTransactions = useMemo(() => {
+    const now = new Date();
+    const months = timeRange === '1M' ? 1 : timeRange === '3M' ? 3 : timeRange === '6M' ? 6 : 12;
+    const cutoff = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+
+    return transactions.filter((t) => new Date(t.date) >= cutoff);
+  }, [transactions, timeRange]);
+
+  // Overall stats
+  const stats = useMemo(() => {
+    const income = filteredTransactions
+      .filter((t) => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const expenses = filteredTransactions
+      .filter((t) => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const savings = income - expenses;
+    const savingsRate = income > 0 ? (savings / income) * 100 : 0;
+
+    return { income, expenses, savings, savingsRate };
+  }, [filteredTransactions]);
+
+  // Monthly trend data
+  const monthlyData = useMemo(() => {
+    const months = timeRange === '1M' ? 1 : timeRange === '3M' ? 3 : timeRange === '6M' ? 6 : 12;
+    const now = new Date();
+
+    const data: { month: string; income: number; expenses: number }[] = [];
+
+    for (let i = months - 1; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthName = getMonthName(date).slice(0, 3);
+
+      const monthTransactions = filteredTransactions.filter((t) => t.date.startsWith(monthKey));
       const income = monthTransactions
         .filter((t) => t.type === 'income')
         .reduce((sum, t) => sum + t.amount, 0);
-
-      const expense = monthTransactions
+      const expenses = monthTransactions
         .filter((t) => t.type === 'expense')
         .reduce((sum, t) => sum + t.amount, 0);
 
-      return {
-        month: format(month, 'MMM'),
-        income,
-        expense,
-        savings: income - expense,
-      };
-    });
-  }, [transactions]);
+      data.push({ month: monthName, income, expenses });
+    }
 
-  // Category breakdown (current month)
-  const categoryBreakdown = useMemo(() => {
-    const currentMonth = getMonthKey();
-    const expenses = transactions.filter(
-      (t) => t.type === 'expense' && getMonthKey(new Date(t.date)) === currentMonth
-    );
+    return data;
+  }, [filteredTransactions, timeRange]);
 
-    const categoryTotals: Record<string, number> = {};
+  // Category breakdown (expenses)
+  const categoryData = useMemo(() => {
+    const expenses = filteredTransactions.filter((t) => t.type === 'expense');
+    const grouped: Record<string, number> = {};
+
     expenses.forEach((t) => {
-      categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
+      grouped[t.category] = (grouped[t.category] || 0) + t.amount;
     });
 
-    return Object.entries(categoryTotals)
-      .map(([category, amount], index) => ({
-        name: TRANSACTION_CATEGORIES[category as TransactionCategory]?.label.split(' ')[0] || category,
-        amount,
-        color: CHART_COLORS[index % CHART_COLORS.length],
-        legendFontColor: colors.textSecondary,
-        legendFontSize: 11,
-      }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [transactions, colors]);
+    const total = Object.values(grouped).reduce((sum, v) => sum + v, 0);
 
-  // Summary stats
-  const stats = useMemo(() => {
-    const currentMonth = getMonthKey();
-    const lastMonth = getMonthKey(subMonths(new Date(), 1));
+    return Object.entries(grouped)
+      .map(([category, amount]) => {
+        const catInfo = TRANSACTION_CATEGORIES[category as TransactionCategory];
+        return {
+          category,
+          amount,
+          percentage: total > 0 ? (amount / total) * 100 : 0,
+          color: catInfo?.color || '#8E8E93',
+          name: catInfo?.label || category,
+        };
+      })
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 6);
+  }, [filteredTransactions]);
 
-    const currentMonthTrans = transactions.filter(
-      (t) => getMonthKey(new Date(t.date)) === currentMonth
-    );
-    const lastMonthTrans = transactions.filter(
-      (t) => getMonthKey(new Date(t.date)) === lastMonth
-    );
-
-    const currentIncome = currentMonthTrans
-      .filter((t) => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
-    const currentExpense = currentMonthTrans
-      .filter((t) => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const lastIncome = lastMonthTrans
-      .filter((t) => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
-    const lastExpense = lastMonthTrans
-      .filter((t) => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const incomeChange =
-      lastIncome > 0 ? ((currentIncome - lastIncome) / lastIncome) * 100 : 0;
-    const expenseChange =
-      lastExpense > 0 ? ((currentExpense - lastExpense) / lastExpense) * 100 : 0;
-
-    const avgMonthlyIncome = monthlyData.reduce((sum, m) => sum + m.income, 0) / 6;
-    const avgMonthlyExpense = monthlyData.reduce((sum, m) => sum + m.expense, 0) / 6;
-
-    return {
-      currentIncome,
-      currentExpense,
-      incomeChange,
-      expenseChange,
-      avgMonthlyIncome,
-      avgMonthlyExpense,
-      savingsRate: currentIncome > 0 ? ((currentIncome - currentExpense) / currentIncome) * 100 : 0,
-    };
-  }, [transactions, monthlyData]);
-
+  // Chart config
   const chartConfig = {
-    backgroundColor: colors.card,
     backgroundGradientFrom: colors.card,
     backgroundGradientTo: colors.card,
-    decimalPlaces: 0,
     color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
-    labelColor: () => colors.textSecondary,
-    style: {
-      borderRadius: 16,
+    strokeWidth: 2,
+    barPercentage: 0.6,
+    decimalPlaces: 0,
+    propsForLabels: {
+      fontSize: 10,
+      fill: colors.textMuted,
     },
     propsForBackgroundLines: {
       strokeDasharray: '',
@@ -155,134 +147,269 @@ const AnalysisScreen: React.FC = () => {
     },
   };
 
+  // Pie chart data
+  const pieData = categoryData.map((c) => ({
+    name: c.name,
+    amount: c.amount,
+    color: c.color,
+    legendFontColor: colors.text,
+    legendFontSize: 11,
+  }));
+
+  // Line chart data
+  const lineData = {
+    labels: monthlyData.map((d) => d.month),
+    datasets: [
+      {
+        data: monthlyData.map((d) => d.income || 0),
+        color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
+        strokeWidth: 2,
+      },
+      {
+        data: monthlyData.map((d) => d.expenses || 0),
+        color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`,
+        strokeWidth: 2,
+      },
+    ],
+    legend: ['Income', 'Expenses'],
+  };
+
+  // Bar chart data
+  const barData = {
+    labels: monthlyData.slice(-4).map((d) => d.month),
+    datasets: [
+      {
+        data: monthlyData.slice(-4).map((d) => d.income - d.expenses),
+      },
+    ],
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.text }]}>Analysis</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ScrollView style={styles.content}>
+          <Skeleton height={120} borderRadius={16} style={{ marginBottom: 16 }} />
+          <Skeleton height={250} borderRadius={16} style={{ marginBottom: 16 }} />
+          <Skeleton height={250} borderRadius={16} />
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            setTimeout(() => setRefreshing(false), 1000);
-          }}
-          tintColor={colors.primary}
-        />
-      }
-    >
-      {/* Summary Stats */}
-      <View style={styles.statsGrid}>
-        <Card style={styles.statCard}>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Savings Rate</Text>
-          <Text
-            style={[
-              styles.statValue,
-              { color: stats.savingsRate >= 0 ? colors.success : colors.danger },
-            ]}
-          >
-            {stats.savingsRate.toFixed(1)}%
-          </Text>
-        </Card>
-        <Card style={styles.statCard}>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Avg Monthly</Text>
-          <Text style={[styles.statValue, { color: colors.primary }]}>
-            {formatCompactCurrency(stats.avgMonthlyIncome - stats.avgMonthlyExpense, currency)}
-          </Text>
-        </Card>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: colors.text }]}>Analysis</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      {/* Income vs Expense Trend */}
-      <Card style={styles.chartCard}>
-        <Text style={[styles.chartTitle, { color: colors.text }]}>Income vs Expenses</Text>
-        <Text style={[styles.chartSubtitle, { color: colors.textMuted }]}>Last 6 months</Text>
-        <LineChart
-          data={{
-            labels: monthlyData.map((m) => m.month),
-            datasets: [
-              {
-                data: monthlyData.map((m) => m.income || 0),
-                color: () => colors.success,
-                strokeWidth: 2,
-              },
-              {
-                data: monthlyData.map((m) => m.expense || 0),
-                color: () => colors.danger,
-                strokeWidth: 2,
-              },
-            ],
-            legend: ['Income', 'Expenses'],
-          }}
-          width={CHART_WIDTH}
-          height={200}
-          chartConfig={chartConfig}
-          bezier
-          style={styles.chart}
-        />
-      </Card>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+      >
+        {/* Time Range Selector */}
+        <View style={styles.timeRangeContainer}>
+          {(['1M', '3M', '6M', '1Y'] as TimeRange[]).map((range) => (
+            <TouchableOpacity
+              key={range}
+              onPress={() => setTimeRange(range)}
+              style={[
+                styles.timeRangeButton,
+                {
+                  backgroundColor: timeRange === range ? colors.primary : colors.card,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.timeRangeText,
+                  { color: timeRange === range ? '#ffffff' : colors.text },
+                ]}
+              >
+                {range}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-      {/* Savings Trend */}
-      <Card style={styles.chartCard}>
-        <Text style={[styles.chartTitle, { color: colors.text }]}>Monthly Savings</Text>
-        <BarChart
-          data={{
-            labels: monthlyData.map((m) => m.month),
-            datasets: [
-              {
-                data: monthlyData.map((m) => Math.max(m.savings, 0)),
-              },
-            ],
-          }}
-          width={CHART_WIDTH}
-          height={200}
-          chartConfig={{
-            ...chartConfig,
-            color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
-          }}
-          style={styles.chart}
-          showValuesOnTopOfBars
-          fromZero
-          yAxisLabel=""
-          yAxisSuffix=""
-        />
-      </Card>
-
-      {/* Category Breakdown */}
-      {categoryBreakdown.length > 0 && (
-        <Card style={styles.chartCard}>
-          <Text style={[styles.chartTitle, { color: colors.text }]}>Spending by Category</Text>
-          <Text style={[styles.chartSubtitle, { color: colors.textMuted }]}>This month</Text>
-          <PieChart
-            data={categoryBreakdown}
-            width={CHART_WIDTH}
-            height={200}
-            chartConfig={chartConfig}
-            accessor="amount"
-            backgroundColor="transparent"
-            paddingLeft="15"
-            absolute
-          />
-        </Card>
-      )}
-
-      {/* Top Spending Categories */}
-      <Card style={styles.chartCard}>
-        <Text style={[styles.chartTitle, { color: colors.text }]}>Top Categories</Text>
-        {categoryBreakdown.slice(0, 5).map((cat, index) => (
-          <View key={cat.name} style={styles.categoryRow}>
-            <View style={[styles.categoryRank, { backgroundColor: cat.color }]}>
-              <Text style={styles.rankText}>{index + 1}</Text>
+        {/* Stats Overview */}
+        <Card style={styles.statsCard}>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Income</Text>
+              <Text style={[styles.statValue, { color: colors.success }]}>
+                {formatCurrency(stats.income, currency)}
+              </Text>
             </View>
-            <Text style={[styles.categoryName, { color: colors.text }]}>{cat.name}</Text>
-            <Text style={[styles.categoryAmount, { color: colors.textSecondary }]}>
-              {formatCurrency(cat.amount, currency)}
-            </Text>
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Expenses</Text>
+              <Text style={[styles.statValue, { color: colors.danger }]}>
+                {formatCurrency(stats.expenses, currency)}
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Net Savings</Text>
+              <Text
+                style={[styles.statValue, { color: stats.savings >= 0 ? colors.success : colors.danger }]}
+              >
+                {formatCurrency(stats.savings, currency)}
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Savings Rate</Text>
+              <Text style={[styles.statValue, { color: colors.primary }]}>
+                {formatPercentage(stats.savingsRate, 1)}
+              </Text>
+            </View>
           </View>
-        ))}
-      </Card>
+        </Card>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        {/* Income vs Expenses Trend */}
+        <Card style={styles.chartCard}>
+          <Text style={[styles.chartTitle, { color: colors.text }]}>Income vs Expenses</Text>
+          {monthlyData.length > 0 ? (
+            <LineChart
+              data={lineData}
+              width={CHART_WIDTH}
+              height={200}
+              chartConfig={chartConfig}
+              bezier
+              style={styles.chart}
+              withInnerLines={false}
+              withOuterLines={false}
+              withDots={true}
+              withShadow={false}
+            />
+          ) : (
+            <View style={styles.emptyChart}>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No data available</Text>
+            </View>
+          )}
+        </Card>
+
+        {/* Category Breakdown */}
+        <Card style={styles.chartCard}>
+          <Text style={[styles.chartTitle, { color: colors.text }]}>Expense Breakdown</Text>
+          {pieData.length > 0 ? (
+            <>
+              <PieChart
+                data={pieData}
+                width={CHART_WIDTH}
+                height={180}
+                chartConfig={chartConfig}
+                accessor="amount"
+                backgroundColor="transparent"
+                paddingLeft="0"
+                center={[10, 0]}
+                absolute
+              />
+              <View style={styles.categoryList}>
+                {categoryData.map((c) => (
+                  <View key={c.category} style={styles.categoryItem}>
+                    <View style={styles.categoryLeft}>
+                      <View style={[styles.categoryDot, { backgroundColor: c.color }]} />
+                      <Text style={[styles.categoryName, { color: colors.text }]}>{c.name}</Text>
+                    </View>
+                    <View style={styles.categoryRight}>
+                      <Text style={[styles.categoryAmount, { color: colors.text }]}>
+                        {formatCurrency(c.amount, currency)}
+                      </Text>
+                      <Text style={[styles.categoryPercent, { color: colors.textMuted }]}>
+                        {formatPercentage(c.percentage, 0)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : (
+            <View style={styles.emptyChart}>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No expenses recorded</Text>
+            </View>
+          )}
+        </Card>
+
+        {/* Monthly Savings */}
+        <Card style={styles.chartCard}>
+          <Text style={[styles.chartTitle, { color: colors.text }]}>Monthly Savings</Text>
+          {monthlyData.length > 0 ? (
+            <BarChart
+              data={barData}
+              width={CHART_WIDTH}
+              height={180}
+              chartConfig={{
+                ...chartConfig,
+                color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
+              }}
+              style={styles.chart}
+              showValuesOnTopOfBars
+              withInnerLines={false}
+              fromZero
+              yAxisLabel=""
+              yAxisSuffix=""
+            />
+          ) : (
+            <View style={styles.emptyChart}>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No data available</Text>
+            </View>
+          )}
+        </Card>
+
+        {/* Insights */}
+        <Card style={[styles.insightsCard, { marginBottom: 32 }]}>
+          <Text style={[styles.chartTitle, { color: colors.text }]}>Quick Insights</Text>
+          <View style={styles.insightsList}>
+            {stats.savingsRate >= 20 && (
+              <View style={styles.insightItem}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                <Text style={[styles.insightText, { color: colors.text }]}>
+                  Great job! You're saving {formatPercentage(stats.savingsRate, 0)} of your income.
+                </Text>
+              </View>
+            )}
+            {stats.savingsRate > 0 && stats.savingsRate < 20 && (
+              <View style={styles.insightItem}>
+                <Ionicons name="alert-circle" size={20} color={colors.warning} />
+                <Text style={[styles.insightText, { color: colors.text }]}>
+                  Try to increase your savings rate to at least 20%.
+                </Text>
+              </View>
+            )}
+            {stats.savingsRate <= 0 && (
+              <View style={styles.insightItem}>
+                <Ionicons name="warning" size={20} color={colors.danger} />
+                <Text style={[styles.insightText, { color: colors.text }]}>
+                  You're spending more than you earn. Review your expenses.
+                </Text>
+              </View>
+            )}
+            {categoryData.length > 0 && (
+              <View style={styles.insightItem}>
+                <Ionicons name="pie-chart" size={20} color={colors.primary} />
+                <Text style={[styles.insightText, { color: colors.text }]}>
+                  Top expense: {categoryData[0].name} ({formatPercentage(categoryData[0].percentage, 0)})
+                </Text>
+              </View>
+            )}
+          </View>
+        </Card>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -290,25 +417,55 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
   content: {
-    padding: 16,
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  timeRangeContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 8,
+  },
+  timeRangeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  timeRangeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statsCard: {
+    marginBottom: 16,
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+    flexWrap: 'wrap',
   },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
+  statItem: {
+    width: '50%',
+    paddingVertical: 8,
   },
   statLabel: {
     fontSize: 12,
-    marginBottom: 4,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '700',
+    marginTop: 4,
   },
   chartCard: {
     marginBottom: 16,
@@ -316,44 +473,70 @@ const styles = StyleSheet.create({
   chartTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
-  },
-  chartSubtitle: {
-    fontSize: 12,
     marginBottom: 12,
   },
   chart: {
+    borderRadius: 12,
     marginLeft: -16,
-    borderRadius: 16,
   },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  categoryRank: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  emptyChart: {
+    height: 150,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rankText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
+  emptyText: {
+    fontSize: 14,
+  },
+  categoryList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  categoryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  categoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   categoryName: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 12,
+    fontSize: 13,
+  },
+  categoryRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   categoryAmount: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  categoryPercent: {
+    fontSize: 12,
+    width: 40,
+    textAlign: 'right',
+  },
+  insightsCard: {
+    marginBottom: 16,
+  },
+  insightsList: {
+    gap: 12,
+  },
+  insightItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  insightText: {
+    fontSize: 13,
+    flex: 1,
   },
 });
 

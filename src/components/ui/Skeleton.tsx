@@ -1,12 +1,12 @@
-import React from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
-import { useTheme } from '@/contexts/ThemeContext';
+import React, { useEffect, useRef } from 'react';
+import { View, Animated, StyleSheet, ViewStyle, DimensionValue } from 'react-native';
+import { useTheme } from '@/contexts';
 
 interface SkeletonProps {
-  width?: number | string;
+  width?: DimensionValue;
   height?: number;
   borderRadius?: number;
-  style?: object;
+  style?: ViewStyle;
 }
 
 export const Skeleton: React.FC<SkeletonProps> = ({
@@ -15,10 +15,10 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   borderRadius = 8,
   style,
 }) => {
-  const { colors, isDark } = useTheme();
-  const animatedValue = React.useRef(new Animated.Value(0)).current;
+  const { colors } = useTheme();
+  const animatedValue = useRef(new Animated.Value(0)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(animatedValue, {
@@ -33,9 +33,11 @@ export const Skeleton: React.FC<SkeletonProps> = ({
         }),
       ])
     );
+
     animation.start();
+
     return () => animation.stop();
-  }, [animatedValue]);
+  }, []);
 
   const opacity = animatedValue.interpolate({
     inputRange: [0, 1],
@@ -45,12 +47,11 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   return (
     <Animated.View
       style={[
-        styles.skeleton,
         {
           width,
           height,
           borderRadius,
-          backgroundColor: isDark ? '#2d2d44' : '#e2e8f0',
+          backgroundColor: colors.border,
           opacity,
         },
         style,
@@ -60,39 +61,53 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 };
 
 interface SkeletonCardProps {
-  lines?: number;
+  style?: ViewStyle;
 }
 
-export const SkeletonCard: React.FC<SkeletonCardProps> = ({ lines = 3 }) => {
+export const SkeletonCard: React.FC<SkeletonCardProps> = ({ style }) => {
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card }]}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.card, borderColor: colors.border },
+        style,
+      ]}
+    >
       <View style={styles.cardHeader}>
         <Skeleton width={48} height={48} borderRadius={24} />
         <View style={styles.cardHeaderText}>
           <Skeleton width="60%" height={16} />
-          <Skeleton width="40%" height={14} style={{ marginTop: 8 }} />
+          <Skeleton width="40%" height={12} style={{ marginTop: 8 }} />
         </View>
       </View>
-      {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton
-          key={i}
-          width={`${100 - i * 15}%`}
-          height={14}
-          style={{ marginTop: 12 }}
-        />
+      <Skeleton width="100%" height={12} style={{ marginTop: 16 }} />
+      <Skeleton width="80%" height={12} style={{ marginTop: 8 }} />
+    </View>
+  );
+};
+
+interface SkeletonListProps {
+  count?: number;
+  style?: ViewStyle;
+}
+
+export const SkeletonList: React.FC<SkeletonListProps> = ({ count = 3, style }) => {
+  return (
+    <View style={style}>
+      {Array.from({ length: count }).map((_, index) => (
+        <SkeletonCard key={index} style={{ marginBottom: 12 }} />
       ))}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  skeleton: {},
   card: {
     padding: 16,
     borderRadius: 16,
-    marginBottom: 12,
+    borderWidth: 1,
   },
   cardHeader: {
     flexDirection: 'row',

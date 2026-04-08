@@ -1,35 +1,47 @@
 import React from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '@/contexts';
+import Button from './Button';
 
 interface EmptyStateProps {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: string;
   title: string;
   description?: string;
-  action?: React.ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+  style?: ViewStyle;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
-  icon,
+  icon = 'folder-open-outline',
   title,
   description,
-  action,
+  actionLabel,
+  onAction,
+  style,
 }) => {
   const { colors } = useTheme();
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.iconContainer, { backgroundColor: colors.cardSecondary }]}>
-        <Ionicons name={icon} size={48} color={colors.textMuted} />
+    <View style={[styles.container, style]}>
+      <View style={[styles.iconContainer, { backgroundColor: colors.primaryLight }]}>
+        <Ionicons name={icon as any} size={48} color={colors.primary} />
       </View>
       <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
       {description && (
-        <Text style={[styles.description, { color: colors.textSecondary }]}>
+        <Text style={[styles.description, { color: colors.textMuted }]}>
           {description}
         </Text>
       )}
-      {action && <View style={styles.actionContainer}>{action}</View>}
+      {actionLabel && onAction && (
+        <Button
+          title={actionLabel}
+          onPress={onAction}
+          style={styles.button}
+          size="small"
+        />
+      )}
     </View>
   );
 };
@@ -39,7 +51,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: 32,
   },
   iconContainer: {
     width: 96,
@@ -47,7 +59,7 @@ const styles = StyleSheet.create({
     borderRadius: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   title: {
     fontSize: 18,
@@ -59,10 +71,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    maxWidth: 280,
+    marginBottom: 24,
   },
-  actionContainer: {
-    marginTop: 24,
+  button: {
+    marginTop: 8,
   },
 });
 
