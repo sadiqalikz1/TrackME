@@ -10,12 +10,13 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts';
+import { useTheme, useAuth } from '@/contexts';
 import { Modal } from './Modal';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Quotation } from '@/types';
 import { formatCurrency, formatDate } from '@/utils/formatters';
+import { CURRENCIES } from '@/utils/constants';
 
 interface QuotationModalProps {
   visible: boolean;
@@ -35,6 +36,8 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
   onCreateQuotation,
 }) => {
   const { colors } = useTheme();
+  const { user } = useAuth();
+  const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
   
   // Quotation fields
   const [clientName, setClientName] = useState('');
@@ -242,7 +245,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
                 <View style={styles.twoThirdInput}>
                   <Text style={[styles.label, { color: colors.textSecondary }]}>Unit Price</Text>
                   <View style={[styles.inputBox, { borderColor: colors.border }]}>
-                    <Text style={[styles.currency, { color: colors.textSecondary }]}>$</Text>
+                    <Text style={[styles.currency, { color: colors.textSecondary }]}>{currencyInfo.symbol}</Text>
                     <TextInput
                       style={[styles.input, { color: colors.text, flex: 1 }]}
                       placeholder="0.00"
@@ -277,12 +280,12 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
                     <View style={styles.itemInfo}>
                       <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
                       <Text style={[styles.itemDetails, { color: colors.textSecondary }]}>
-                        {item.quantity} × {formatCurrency(item.unitPrice, 'USD')}
+                        {item.quantity} × {currencyInfo.symbol}{item.unitPrice.toFixed(2)}
                       </Text>
                     </View>
                     <View style={styles.itemRight}>
                       <Text style={[styles.itemTotal, { color: colors.primary }]}>
-                        {formatCurrency(item.quantity * item.unitPrice, 'USD')}
+                        {currencyInfo.symbol}{(item.quantity * item.unitPrice).toFixed(2)}
                       </Text>
                       <TouchableOpacity onPress={() => handleRemoveItem(index)}>
                         <Ionicons name="close-circle" size={18} color={colors.danger} />
@@ -300,7 +303,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
           <View style={styles.calcRow}>
             <Text style={[styles.calcLabel, { color: colors.textSecondary }]}>Subtotal</Text>
             <Text style={[styles.calcValue, { color: colors.text }]}>
-              {formatCurrency(subtotal, 'USD')}
+              {currencyInfo.symbol}{subtotal.toFixed(2)}
             </Text>
           </View>
 
@@ -316,7 +319,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
               />
             </View>
             <Text style={[styles.calcValue, { color: colors.text }]}>
-              {formatCurrency(taxAmount, 'USD')}
+              {currencyInfo.symbol}{taxAmount.toFixed(2)}
             </Text>
           </View>
 
@@ -324,7 +327,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
             <View style={styles.calcInput}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>Discount</Text>
               <View style={[styles.inputBox, { borderColor: colors.border }]}>
-                <Text style={[styles.currency, { color: colors.textSecondary }]}>$</Text>
+                <Text style={[styles.currency, { color: colors.textSecondary }]}>{currencyInfo.symbol}</Text>
                 <TextInput
                   style={[styles.smallInput, { color: colors.text, flex: 1 }]}
                   placeholder="0"
@@ -335,7 +338,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
               </View>
             </View>
             <Text style={[styles.calcValue, { color: colors.danger }]}>
-              -{formatCurrency(discountAmount, 'USD')}
+              -{currencyInfo.symbol}{discountAmount.toFixed(2)}
             </Text>
           </View>
 
@@ -347,7 +350,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
           >
             <Text style={[styles.totalLabel, { color: colors.text }]}>Total</Text>
             <Text style={[styles.totalValue, { color: colors.primary }]}>
-              {formatCurrency(total, 'USD')}
+              {currencyInfo.symbol}{total.toFixed(2)}
             </Text>
           </View>
 

@@ -16,7 +16,7 @@ import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Button, QuotationModal, EmptyState } from '@/components/ui';
 import { Quotation } from '@/types';
 import { deleteDocument, createDocument, subscribeToCollection } from '@/services/firebase';
-import { COLLECTIONS } from '@/utils/constants';
+import { COLLECTIONS, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
 const QuotationsScreen: React.FC = () => {
@@ -25,6 +25,7 @@ const QuotationsScreen: React.FC = () => {
   const { showSuccess, showError } = useNotification();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +131,7 @@ const QuotationsScreen: React.FC = () => {
         <View style={styles.detailItem}>
           <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Total</Text>
           <Text style={[styles.detailValue, { color: colors.primary }]}>
-            ${item.total.toFixed(2)}
+            {currencyInfo.symbol}{item.total.toFixed(2)}
           </Text>
         </View>
         <View style={styles.divider} />

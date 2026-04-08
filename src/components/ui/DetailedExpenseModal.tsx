@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts';
+import { useTheme, useAuth } from '@/contexts';
 import { Modal } from './Modal';
 import { Button } from './Button';
 import { Card } from './Card';
 import { DetailedExpense, ExpenseType } from '@/types';
-import { EXPENSE_TYPES } from '@/utils/constants';
+import { EXPENSE_TYPES, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
 interface DetailedExpenseModalProps {
@@ -25,6 +25,9 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
   onRemoveExpense,
 }) => {
   const { colors } = useTheme();
+  const { user } = useAuth();
+  const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
+  
   const [type, setType] = useState<ExpenseType>('materials');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -83,7 +86,7 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
         <Card style={{ backgroundColor: colors.danger + '15', marginBottom: 16 }}>
           <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Expenses</Text>
           <Text style={[styles.summaryValue, { color: colors.danger }]}>
-            {formatCurrency(totalExpenses, 'USD')}
+            {currencyInfo.symbol}{totalExpenses.toFixed(2)}
           </Text>
         </Card>
 
@@ -103,7 +106,7 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
                 </Text>
               </View>
               <Text style={[styles.breakdownAmount, { color: colors.text }]}>
-                {formatCurrency(item.total, 'USD')}
+                {currencyInfo.symbol}{item.total.toFixed(2)}
               </Text>
             </View>
           ))}
@@ -262,7 +265,7 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
                   </View>
                   <View style={styles.expenseRight}>
                     <Text style={[styles.expenseAmount, { color: colors.danger }]}>
-                      {formatCurrency(item.amount, 'USD')}
+                      {currencyInfo.symbol}{item.amount.toFixed(2)}
                     </Text>
                     <TouchableOpacity onPress={() => handleRemoveExpense(item.id)}>
                       <Ionicons name="trash-outline" size={16} color={colors.danger} />

@@ -34,6 +34,11 @@ const QuotationDetailScreen: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editStatus, setEditStatus] = useState<Quotation['status']>('pending');
   const [exporting, setExporting] = useState(false);
+  const [editItemModalVisible, setEditItemModalVisible] = useState(false);
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+  const [editedItemName, setEditedItemName] = useState('');
+  const [editedItemPrice, setEditedItemPrice] = useState('');
+  const [editedItemQty, setEditedItemQty] = useState('');
 
   const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
@@ -87,6 +92,60 @@ const QuotationDetailScreen: React.FC = () => {
         },
       },
     ]);
+  };
+
+  const handleEditItem = (index: number) => {
+    if (!quotation) return;
+    const item = quotation.items[index];
+    setSelectedItemIndex(index);
+    setEditedItemName(item.name);
+    setEditedItemPrice(item.unitPrice.toString());
+    setEditedItemQty(item.quantity.toString());
+    setEditItemModalVisible(true);
+  };
+
+  const handleSaveItemChanges = async () => {
+    if (selectedItemIndex === null || !quotation || !editedItemName.trim() || !editedItemPrice) {
+      Alert.alert('Invalid Input', 'Please fill in all fields');
+      return;
+    }
+
+    try {
+      const updatedItems = quotation.items.map((item, idx) => {
+        if (idx === selectedItemIndex) {
+          const quantity = parseFloat(editedItemQty) || 1;
+          const unitPrice = parseFloat(editedItemPrice);
+          return {
+            ...item,
+            name: editedItemName.trim(),
+            quantity,
+            unitPrice,
+            total: quantity * unitPrice,
+          };
+        }
+        return item;
+      });
+
+      const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+      const updatedQuotation = {
+        ...quotation,
+        items: updatedItems,
+        subtotal,
+        total: subtotal + quotation.tax - quotation.discount,
+      };
+
+      await updateDocument(COLLECTIONS.QUOTATIONS, quotation.id, {
+        items: updatedItems,
+        subtotal,
+        total: updatedQuotation.total,
+      });
+
+      setQuotation(updatedQuotation);
+      setEditItemModalVisible(false);
+      showSuccess('Item updated');
+    } catch (error) {
+      showError('Failed to update item');
+    }
   };
 
   const generatePDF = async () => {
@@ -344,17 +403,24 @@ const QuotationDetailScreen: React.FC = () => {
         <Card style={styles.card}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Items ({quotation.items.length})</Text>
           {quotation.items.map((item, index) => (
-            <View key={index} style={[styles.itemRow, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity 
+              key={index} 
+              style={[styles.itemRow, { borderBottomColor: colors.border }]}
+              onPress={() => handleEditItem(index)}
+            >
               <View style={styles.itemInfo}>
                 <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
                 <Text style={[styles.itemDetails, { color: colors.textMuted }]}>
-                  {item.quantity} × ${item.unitPrice.toFixed(2)}
+                  {item.quantity} × {currencyInfo.symbol}{item.unitPrice.toFixed(2)}
                 </Text>
               </View>
-              <Text style={[styles.itemTotal, { color: colors.primary }]}>
-                ${item.total.toFixed(2)}
-              </Text>
-            </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.itemTotal, { color: colors.primary }]}>
+                  {currencyInfo.symbol}{item.total.toFixed(2)}
+                </Text>
+                <Ionicons name="pencil" size={14} color={colors.textMuted} />
+              </View>
+            </TouchableOpacity>
           ))}
         </Card>
 
@@ -364,14 +430,14 @@ const QuotationDetailScreen: React.FC = () => {
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Subtotal</Text>
             <Text style={[styles.summaryValue, { color: colors.text }]}>
-              ${quotation.subtotal.toFixed(2)}
+              {currencyInfo.symbol}{quotation.subtotal.toFixed(2)}
             </Text>
           </View>
           {quotation.tax > 0 && (
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Tax</Text>
               <Text style={[styles.summaryValue, { color: colors.text }]}>
-                ${quotation.tax.toFixed(2)}
+                {currencyInfo.symbol}{quotation.tax.toFixed(2)}
               </Text>
             </View>
           )}
@@ -379,14 +445,14 @@ const QuotationDetailScreen: React.FC = () => {
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Discount</Text>
               <Text style={[styles.summaryValue, { color: colors.danger }]}>
-                -${quotation.discount.toFixed(2)}
+                -{currencyInfo.symbol}{quotation.discount.toFixed(2)}
               </Text>
             </View>
           )}
           <View style={[styles.summaryRow, styles.totalRow, { borderTopColor: colors.border }]}>
             <Text style={[styles.totalLabel, { color: colors.text }]}>Total</Text>
             <Text style={[styles.totalValue, { color: colors.primary }]}>
-              ${quotation.total.toFixed(2)}
+              {currencyInfo.symbol}{quotation.total.toFixed(2)}
             </Text>
           </View>
         </Card>
@@ -440,6 +506,42 @@ const QuotationDetailScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
           <Button title="Save" onPress={handleUpdateStatus} style={{ marginTop: 12 }} />
+        </View>
+      </Modal>
+
+      {/* Edit Item Modal */}
+      <Modal visible={editItemModalVisible} title="Edit Item" onClose={() => setEditItemModalVisible(false)}>
+        <View style={styles.modalContent}>
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Item Name</Text>
+            <Input
+              placeholder="Item name"
+              value={editedItemName}
+              onChangeText={setEditedItemName}
+            />
+          </View>
+
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Unit Price</Text>
+            <Input
+              placeholder="0.00"
+              value={editedItemPrice}
+              onChangeText={setEditedItemPrice}
+              keyboardType="decimal-pad"
+            />
+          </View>
+
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Quantity</Text>
+            <Input
+              placeholder="1"
+              value={editedItemQty}
+              onChangeText={setEditedItemQty}
+              keyboardType="decimal-pad"
+            />
+          </View>
+
+          <Button title="Save Changes" onPress={handleSaveItemChanges} style={{ marginTop: 12 }} />
         </View>
       </Modal>
     </View>
