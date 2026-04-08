@@ -6,3 +6,4 @@ export { CategoryPicker, CategoryGrid } from './CategoryPicker';
 export { ProgressBar } from './ProgressBar';
 export { EmptyState } from './EmptyState';
 export { Skeleton, SkeletonCard, SkeletonList } from './Skeleton';
+export { ProfitTransferModal } from './ProfitTransferModal';

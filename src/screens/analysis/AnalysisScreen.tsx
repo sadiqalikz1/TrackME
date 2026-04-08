@@ -88,7 +88,7 @@ const AnalysisScreen: React.FC = () => {
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthName = getMonthName(date).slice(0, 3);
 
-      const monthTransactions = filteredTransactions.filter((t) => t.date.startsWith(monthKey));
+      const monthTransactions = filteredTransactions.filter((t) => typeof t.date === 'string' && t.date.startsWith(monthKey));
       const income = monthTransactions
         .filter((t) => t.type === 'income')
         .reduce((sum, t) => sum + t.amount, 0);

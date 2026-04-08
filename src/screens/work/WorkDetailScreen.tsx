@@ -14,8 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, useAuth, useNotification } from '@/contexts';
-import { Card, Button, ProgressBar, Modal, Input } from '@/components/ui';
-import { Work, Transaction } from '@/types';
+import { Card, Button, ProgressBar, Modal, Input, ProfitTransferModal } from '@/components/ui';
+import { Work, Transaction, TransactionCategory } from '@/types';
 import { getWorkById, updateDocument, deleteDocument, createDocument } from '@/services/firebase';
 import { WORK_CATEGORIES, STATUS_COLORS, COLLECTIONS } from '@/utils/constants';
 import { formatCurrency, formatDate, formatPercentage, calculateProfit } from '@/utils/formatters';
@@ -113,40 +113,56 @@ const WorkDetailScreen: React.FC = () => {
     ]);
   };
 
-  const handleTransferProfit = async () => {
-    if (!work || work.isProfitTransferred) return;
+  const handleTransferProfit = () => {
+    if (!work || work.isProfitTransferred || work.profit <= 0) return;
+    setTransferModalVisible(true);
+  };
 
-    Alert.alert(
-      'Transfer Profit',
-      `Transfer ${formatCurrency(work.profit, currency)} as income?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Transfer',
-          onPress: async () => {
-            try {
-              // Create income transaction
-              await createDocument<Transaction>(COLLECTIONS.TRANSACTIONS, {
-                uid: user!.uid,
-                amount: work.profit,
-                type: 'income',
-                category: 'salary',
-                note: `Profit from: ${work.title}`,
-                date: new Date().toISOString().split('T')[0],
-                isRecurring: false,
-              });
+  const handleTransferProfitSubmit = async (data: {
+    amount: number;
+    category: TransactionCategory;
+    bankAccount: string;
+  }) => {
+    if (!work) return;
 
-              // Mark as transferred
-              await updateDocument(COLLECTIONS.WORKS, work.id, { isProfitTransferred: true });
-              setWork({ ...work, isProfitTransferred: true });
-              showSuccess('Profit transferred!');
-            } catch (error) {
-              showError('Failed to transfer profit');
-            }
-          },
-        },
-      ]
-    );
+    try {
+      // Create income transaction
+      const transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> = {
+        uid: user!.uid,
+        amount: data.amount,
+        type: 'income',
+        category: data.category,
+        note: `Profit from: ${work.title}`,
+        date: new Date().toISOString().split('T')[0],
+        isRecurring: false,
+        bankAccount: data.bankAccount,
+        workId: work.id,
+      };
+
+      await createDocument(COLLECTIONS.TRANSACTIONS, transaction);
+
+      // Mark as transferred
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        isProfitTransferred: true,
+        profitTransferredAmount: data.amount,
+        profitTransferredDate: new Date(),
+        profitTransferredTo: data.bankAccount,
+      });
+
+      setWork({
+        ...work,
+        isProfitTransferred: true,
+        profitTransferredAmount: data.amount,
+        profitTransferredDate: new Date(),
+        profitTransferredTo: data.bankAccount,
+      });
+
+      showSuccess('Profit transferred to income!');
+      setTransferModalVisible(false);
+    } catch (error) {
+      console.error('Transfer error:', error);
+      showError(error instanceof Error ? error.message : 'Failed to transfer profit');
+    }
   };
 
   const handleDelete = () => {
@@ -369,6 +385,13 @@ const WorkDetailScreen: React.FC = () => {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      <ProfitTransferModal
+        visible={transferModalVisible}
+        profit={work.profit}
+        onClose={() => setTransferModalVisible(false)}
+        onTransfer={handleTransferProfitSubmit}
+      />
     </View>
   );
 };

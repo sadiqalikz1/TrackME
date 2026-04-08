@@ -35,6 +35,13 @@ export type TransactionCategory =
   | 'investment'
   | 'bills'
   | 'utilities'
+  | 'work_profit'
+  | 'stock_market'
+  | 'dividend'
+  | 'bonus'
+  | 'gift'
+  | 'refund'
+  | 'loan_received'
   | 'other';
 
 export interface Transaction {
@@ -48,6 +55,8 @@ export interface Transaction {
   date: string;
   isRecurring: boolean;
   recurringId?: string;
+  bankAccount?: string;
+  workId?: string; // Reference to Work if from profit transfer
   createdAt: Date;
   updatedAt: Date;
 }
@@ -92,8 +101,27 @@ export interface Work {
   progress: number; // 0-100
   photos: string[];
   isProfitTransferred: boolean;
+  profitTransferredAmount?: number;
+  profitTransferredDate?: Date;
+  profitTransferredTo?: string; // bank/account name
   startDate: Date;
   endDate?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Bank Account Types
+export type BankType = 'bank' | 'wallet' | 'investment' | 'cash';
+
+export interface BankAccount {
+  id: string;
+  uid: string;
+  name: string; // e.g., "Bank of America - Checking"
+  type: BankType;
+  accountNumber?: string;
+  balance: number;
+  currency: Currency;
+  isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

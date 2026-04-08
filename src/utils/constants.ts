@@ -1,4 +1,4 @@
-import { TransactionCategory, WorkCategory, Currency, WorkStatus, RecurringFrequency, CurrencyInfo } from '@/types';
+import { TransactionCategory, WorkCategory, Currency, WorkStatus, RecurringFrequency, CurrencyInfo, BankType } from '@/types';
 
 // Transaction Categories
 export const TRANSACTION_CATEGORIES: Record<TransactionCategory, { icon: string; color: string; label: string }> = {
@@ -12,11 +12,33 @@ export const TRANSACTION_CATEGORIES: Record<TransactionCategory, { icon: string;
   investment: { icon: 'trending-up', color: '#6366f1', label: 'Investment' },
   bills: { icon: 'receipt', color: '#f59e0b', label: 'Bills' },
   utilities: { icon: 'flash', color: '#06b6d4', label: 'Utilities' },
+  work_profit: { icon: 'briefcase', color: '#059669', label: 'Work Profit' },
+  stock_market: { icon: 'trending-up', color: '#7c3aed', label: 'Stock Market' },
+  dividend: { icon: 'gift', color: '#db2777', label: 'Dividend' },
+  bonus: { icon: 'star', color: '#d97706', label: 'Bonus' },
+  gift: { icon: 'heart', color: '#ec4899', label: 'Gift' },
+  refund: { icon: 'arrow-back', color: '#3b82f6', label: 'Refund' },
+  loan_received: { icon: 'cash', color: '#10b981', label: 'Loan Received' },
   other: { icon: 'ellipsis-horizontal', color: '#6b7280', label: 'Other' },
 };
 
-export const INCOME_CATEGORIES: TransactionCategory[] = ['salary', 'investment', 'other'];
+export const INCOME_CATEGORIES: TransactionCategory[] = ['salary', 'investment', 'work_profit', 'stock_market', 'dividend', 'bonus', 'gift', 'refund', 'loan_received', 'other'];
 export const EXPENSE_CATEGORIES: TransactionCategory[] = ['food', 'transport', 'rent', 'shopping', 'entertainment', 'health', 'bills', 'utilities', 'other'];
+
+// Bank/Account Types
+export const BANK_TYPES = {
+  bank: 'Bank Account',
+  wallet: 'Digital Wallet',
+  investment: 'Investment Account',
+  cash: 'Cash',
+};
+
+export const DEFAULT_BANKS = [
+  { id: '1', name: 'My Bank Account', type: 'bank' as const },
+  { id: '2', name: 'Wallet', type: 'wallet' as const },
+  { id: '3', name: 'Investment Account', type: 'investment' as const },
+  { id: '4', name: 'Cash', type: 'cash' as const },
+];
 
 // Work Categories
 export const WORK_CATEGORIES: Record<WorkCategory, { icon: string; color: string; label: string }> = {
@@ -92,6 +114,7 @@ export const COLLECTIONS = {
   GOALS: 'goals',
   RECURRING: 'recurring',
   BILL_REMINDERS: 'billReminders',
+  BANK_ACCOUNTS: 'bankAccounts',
 };
 
 // App Configuration
