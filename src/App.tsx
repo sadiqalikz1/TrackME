@@ -2435,3 +2435,380 @@ function WorkDetailModal({ work, onClose, currency }: { work: Work, onClose: () 
     </div>
   );
 }
+
+// --- Savings Goals View Component ---
+
+function SavingsGoalsView({ goals, transactions, currency, uid }: { goals: SavingsGoal[], transactions: Transaction[], currency: string, uid: string }) {
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null);
+  const { showNotification, confirm } = useNotification();
+
+  const handleAddGoal = async (goalData: Partial<SavingsGoal>) => {
+    try {
+      await addDoc(collection(db, 'goals'), {
+        uid,
+        ...goalData,
+        currentAmount: 0,
+        createdAt: Timestamp.now()
+      });
+      showNotification('Savings goal created!');
+      setIsAddModalOpen(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'goals');
+    }
+  };
+
+  const handleUpdateProgress = async (goalId: string, amount: number) => {
+    try {
+      const goal = goals.find(g => g.id === goalId);
+      if (goal) {
+        await updateDoc(doc(db, 'goals', goalId), {
+          currentAmount: goal.currentAmount + amount
+        });
+        showNotification('Goal progress updated!');
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `goals/${goalId}`);
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    confirm(
+      'Delete Goal',
+      'Are you sure you want to delete this savings goal?',
+      async () => {
+        try {
+          await deleteDoc(doc(db, 'goals', goalId));
+          showNotification('Goal deleted');
+          setSelectedGoal(null);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, `goals/${goalId}`);
+        }
+      }
+    );
+  };
+
+  const totalSaved = goals.reduce((acc, g) => acc + g.currentAmount, 0);
+  const totalTarget = goals.reduce((acc, g) => acc + g.targetAmount, 0);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-8"
+    >
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Savings Goals</h2>
+          <p className="text-stone-500">Track your progress toward financial milestones.</p>
+        </div>
+        <button
+          onClick={() => setIsAddModalOpen(true)}
+          className="px-6 py-3 bg-stone-900 text-white rounded-2xl font-bold hover:bg-stone-800 transition-all flex items-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          New Goal
+        </button>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+          <p className="text-sm font-bold text-stone-500 uppercase tracking-wider mb-1">Total Saved</p>
+          <p className="text-3xl font-bold text-emerald-600">{formatCurrency(totalSaved, currency)}</p>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+          <p className="text-sm font-bold text-stone-500 uppercase tracking-wider mb-1">Total Target</p>
+          <p className="text-3xl font-bold">{formatCurrency(totalTarget, currency)}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {goals.map(goal => {
+          const progress = (goal.currentAmount / goal.targetAmount) * 100;
+          const remaining = goal.targetAmount - goal.currentAmount;
+
+          return (
+            <div
+              key={goal.id}
+              onClick={() => setSelectedGoal(goal)}
+              className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm hover:border-stone-900 transition-all cursor-pointer group"
+            >
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-bold mb-1 group-hover:text-stone-900 transition-colors">{goal.name}</h3>
+                  {goal.deadline && (
+                    <p className="text-sm text-stone-500">
+                      Target: {format(goal.deadline, 'MMM dd, yyyy')}
+                    </p>
+                  )}
+                </div>
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                  style={{ backgroundColor: goal.color + '20' }}
+                >
+                  <Target className="w-6 h-6" style={{ color: goal.color }} />
+                </div>
+              </div>
+
+              <div className="space-y-2 mb-6">
+                <div className="flex justify-between text-sm">
+                  <span className="text-stone-500">Progress</span>
+                  <span className="font-bold">{progress.toFixed(1)}%</span>
+                </div>
+                <div className="w-full h-4 bg-stone-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full transition-all rounded-full"
+                    style={{
+                      width: `${Math.min(progress, 100)}%`,
+                      backgroundColor: goal.color
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-xs text-stone-400 mb-1">Current</p>
+                  <p className="text-lg font-bold">{formatCurrency(goal.currentAmount, currency)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-stone-400 mb-1">Remaining</p>
+                  <p className="text-lg font-bold text-stone-500">{formatCurrency(remaining, currency)}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {goals.length === 0 && (
+          <div className="col-span-2 p-20 text-center text-stone-400 bg-white rounded-3xl border border-dashed border-stone-200">
+            <Target className="w-16 h-16 mx-auto mb-4 opacity-20" />
+            <p className="text-lg mb-2">No savings goals yet</p>
+            <p className="text-sm">Create your first goal to start tracking your progress!</p>
+          </div>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {isAddModalOpen && (
+          <AddGoalModal
+            onClose={() => setIsAddModalOpen(false)}
+            onAdd={handleAddGoal}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedGoal && (
+          <GoalDetailModal
+            goal={selectedGoal}
+            currency={currency}
+            onClose={() => setSelectedGoal(null)}
+            onUpdateProgress={handleUpdateProgress}
+            onDelete={handleDeleteGoal}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function AddGoalModal({ onClose, onAdd }: { onClose: () => void, onAdd: (goal: Partial<SavingsGoal>) => void }) {
+  const [name, setName] = useState('');
+  const [targetAmount, setTargetAmount] = useState('');
+  const [deadline, setDeadline] = useState('');
+  const [color, setColor] = useState('#10b981');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !targetAmount) return;
+
+    onAdd({
+      name,
+      targetAmount: parseFloat(targetAmount),
+      deadline: deadline ? new Date(deadline) : undefined,
+      color
+    });
+  };
+
+  const goalColors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8"
+      >
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-2xl font-bold">New Savings Goal</h3>
+          <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-xl transition-all">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-stone-400 uppercase tracking-wider">Goal Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Emergency Fund, Vacation, New Car..."
+              className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-stone-900 outline-none"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-stone-400 uppercase tracking-wider">Target Amount</label>
+            <input
+              type="number"
+              value={targetAmount}
+              onChange={e => setTargetAmount(e.target.value)}
+              placeholder="10000"
+              step="0.01"
+              className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-stone-900 outline-none"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-stone-400 uppercase tracking-wider">Deadline (Optional)</label>
+            <input
+              type="date"
+              value={deadline}
+              onChange={e => setDeadline(e.target.value)}
+              className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-stone-900 outline-none"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-stone-400 uppercase tracking-wider">Color</label>
+            <div className="flex gap-3">
+              {goalColors.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={cn(
+                    "w-12 h-12 rounded-xl transition-all",
+                    color === c ? "ring-4 ring-stone-300 scale-110" : "hover:scale-105"
+                  )}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold hover:bg-stone-800 transition-all"
+          >
+            Create Goal
+          </button>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+function GoalDetailModal({ goal, currency, onClose, onUpdateProgress, onDelete }: {
+  goal: SavingsGoal,
+  currency: string,
+  onClose: () => void,
+  onUpdateProgress: (goalId: string, amount: number) => void,
+  onDelete: (goalId: string) => void
+}) {
+  const [amount, setAmount] = useState('');
+  const progress = (goal.currentAmount / goal.targetAmount) * 100;
+
+  const handleAddProgress = () => {
+    const amt = parseFloat(amount);
+    if (amt && amt > 0) {
+      onUpdateProgress(goal.id, amt);
+      setAmount('');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8"
+      >
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h3 className="text-2xl font-bold mb-2">{goal.name}</h3>
+            {goal.deadline && (
+              <p className="text-sm text-stone-500">Target: {format(goal.deadline, 'MMM dd, yyyy')}</p>
+            )}
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-xl transition-all">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          <div className="p-6 bg-stone-50 rounded-2xl">
+            <div className="flex justify-between mb-4">
+              <div>
+                <p className="text-sm text-stone-500 mb-1">Current Amount</p>
+                <p className="text-2xl font-bold">{formatCurrency(goal.currentAmount, currency)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-stone-500 mb-1">Target Amount</p>
+                <p className="text-2xl font-bold">{formatCurrency(goal.targetAmount, currency)}</p>
+              </div>
+            </div>
+
+            <div className="w-full h-4 bg-white rounded-full overflow-hidden mb-2">
+              <div
+                className="h-full transition-all rounded-full"
+                style={{
+                  width: `${Math.min(progress, 100)}%`,
+                  backgroundColor: goal.color
+                }}
+              />
+            </div>
+            <p className="text-center text-sm font-bold">{progress.toFixed(1)}% Complete</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-stone-400 uppercase tracking-wider">Add Progress</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                placeholder="Enter amount"
+                step="0.01"
+                className="flex-1 p-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 outline-none"
+              />
+              <button
+                onClick={handleAddProgress}
+                className="px-6 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-all"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onDelete(goal.id)}
+            className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+          >
+            <Trash2 className="w-5 h-5" />
+            Delete Goal
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}

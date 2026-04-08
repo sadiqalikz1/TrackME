@@ -9,6 +9,8 @@
         "email": { "type": "string", "format": "email", "description": "User's email address" },
         "displayName": { "type": "string", "description": "User's display name" },
         "currency": { "type": "string", "enum": ["USD", "EUR", "GBP", "INR"], "description": "Preferred currency" },
+        "theme": { "type": "string", "enum": ["light", "dark", "system"], "description": "UI theme preference" },
+        "budgetAlertThreshold": { "type": "number", "description": "Budget alert threshold percentage (0-100)" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" }
       },
       "required": ["uid", "email"]
@@ -62,6 +64,40 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
       },
       "required": ["uid", "title", "status", "quotationAmount"]
+    },
+    "RecurringTransaction": {
+      "title": "RecurringTransaction",
+      "description": "Automated recurring income or expense",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner's user ID" },
+        "amount": { "type": "number", "description": "Transaction amount" },
+        "type": { "type": "string", "enum": ["income", "expense"], "description": "Transaction type" },
+        "category": { "type": "string", "description": "Category name" },
+        "note": { "type": "string", "description": "Optional note" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly", "yearly"], "description": "Recurrence frequency" },
+        "startDate": { "type": "string", "format": "date-time", "description": "Start date" },
+        "endDate": { "type": "string", "format": "date-time", "description": "Optional end date" },
+        "lastGenerated": { "type": "string", "format": "date-time", "description": "Last auto-generated transaction date" },
+        "active": { "type": "boolean", "description": "Whether recurring transaction is active" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["uid", "amount", "type", "category", "frequency", "startDate", "active"]
+    },
+    "SavingsGoal": {
+      "title": "SavingsGoal",
+      "description": "Financial savings goal tracking",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner's user ID" },
+        "name": { "type": "string", "description": "Goal name" },
+        "targetAmount": { "type": "number", "description": "Target amount to save" },
+        "currentAmount": { "type": "number", "description": "Current saved amount" },
+        "deadline": { "type": "string", "format": "date-time", "description": "Optional deadline" },
+        "color": { "type": "string", "description": "Display color for the goal" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["uid", "name", "targetAmount", "currentAmount", "color"]
     }
   },
   "firestore": {
@@ -80,6 +116,14 @@
     "/works/{workId}": {
       "schema": "Work",
       "description": "Professional work tracking records"
+    },
+    "/recurring/{recurringId}": {
+      "schema": "RecurringTransaction",
+      "description": "Recurring transaction templates"
+    },
+    "/goals/{goalId}": {
+      "schema": "SavingsGoal",
+      "description": "User savings goals"
     }
   }
 }
