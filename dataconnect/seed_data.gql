@@ -1,0 +1,67 @@
+mutation SeedData @transaction @auth(level: USER, insecureReason: "Seed data operations are for development/testing only and should be secured appropriately.") {
+  user_insertMany(data: [
+    {
+      id: "b455c110-3162-4318-ae71-d68a9134a66f",
+      username: "testuser1",
+      email: "testuser1@example.com",
+      createdAt: "2023-01-01T10:00:00Z"
+    },
+    {
+      id: "a8e9f5b6-7c01-4d32-9e4a-5b1c0d2e3f40",
+      username: "testuser2",
+      email: "testuser2@example.com",
+      createdAt: "2023-01-02T11:00:00Z"
+    }
+  ])
+  folder_insertMany(data: [
+    {
+      id: "c1a2b3d4-e5f6-7890-1234-567890abcdef",
+      name: "Work Notes",
+      description: "Notes related to work projects",
+      createdAt: "2023-01-03T12:00:00Z",
+      userId: "b455c110-3162-4318-ae71-d68a9134a66f"
+    },
+    {
+      id: "f1a2b3c4-d5e6-7890-1234-567890fedcba",
+      name: "Personal Thoughts",
+      description: "My private journal entries",
+      createdAt: "2023-01-04T13:00:00Z",
+      userId: "b455c110-3162-4318-ae71-d68a9134a66f"
+    },
+    {
+      id: "12345678-abcd-ef01-2345-6789abcdef01",
+      name: "Recipes",
+      description: "Collection of delicious recipes",
+      createdAt: "2023-01-05T14:00:00Z",
+      userId: "a8e9f5b6-7c01-4d32-9e4a-5b1c0d2e3f40"
+    }
+  ])
+  note_insertMany(data: [
+    {
+      id: "d9c8b7a6-f5e4-3210-9876-543210fedcba",
+      title: "Meeting Notes - Project X",
+      content: "Discussed Q1 roadmap and resource allocation.",
+      createdAt: "2023-01-06T15:00:00Z",
+      isPrivate: false,
+      userId: "b455c110-3162-4318-ae71-d68a9134a66f",
+      folderId: "c1a2b3d4-e5f6-7890-1234-567890abcdef"
+    },
+    {
+      id: "e0f1d2c3-a4b5-6789-0123-456789abcdef",
+      title: "Grocery List",
+      content: "Milk, eggs, bread, cheese, apples.",
+      createdAt: "2023-01-07T16:00:00Z",
+      isPrivate: true,
+      userId: "a8e9f5b6-7c01-4d32-9e4a-5b1c0d2e3f40",
+      folderId: "12345678-abcd-ef01-2345-6789abcdef01"
+    }
+  ])
+  sharedNote_insertMany(data: [
+    {
+      id: "1a2b3c4d-5e6f-7890-1234-567890abcdef",
+      noteId: "d9c8b7a6-f5e4-3210-9876-543210fedcba",
+      recipientId: "a8e9f5b6-7c01-4d32-9e4a-5b1c0d2e3f40",
+      sharedAt: "2023-01-08T17:00:00Z"
+    }
+  ])
+}

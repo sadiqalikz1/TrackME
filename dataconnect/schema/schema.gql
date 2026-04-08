@@ -1,0 +1,36 @@
+type User @table {
+  username: String!
+  email: String!
+  createdAt: Timestamp!
+  displayName: String
+  photoUrl: String
+}
+
+type Folder @table {
+  name: String!
+  createdAt: Timestamp!
+  description: String
+  user: User
+}
+
+type Note @table {
+  title: String!
+  content: String!
+  createdAt: Timestamp!
+  isPrivate: Boolean!
+  updatedAt: Timestamp
+  user: User
+  folder: Folder
+}
+
+type SharedNote @table {
+  sharedAt: Timestamp!
+  note: Note!
+  recipient: User!
+}
+
+type AccessLog @table {
+  accessedAt: Timestamp!
+  sharedNote: SharedNote!
+  viewer: User!
+}

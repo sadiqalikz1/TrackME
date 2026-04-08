@@ -1,0 +1,53 @@
+mutation CreateNote($title: String!, $content: String!, $isPrivate: Boolean!, $folderId: UUID) @auth(level: USER, insecureReason: "Creating a note requires a logged-in user and includes the user's UID for ownership.") {
+  note_insert(data: {
+    title: $title,
+    content: $content,
+    isPrivate: $isPrivate,
+    folderId: $folderId,
+    userId_expr: "auth.uid",
+    createdAt_expr: "request.time"
+  }) {
+    id
+  }
+}
+
+query GetMyNotes @auth(level: USER) {
+  notes(where: { userId: { eq_expr: "auth.uid" } }, orderBy: [{ createdAt: DESC }]) {
+    id
+    title
+    content
+    isPrivate
+    createdAt
+    updatedAt
+    folder {
+      id
+      name
+    }
+  }
+}
+
+mutation UpdateNoteContent($id: UUID!, $content: String!) @auth(level: USER) {
+  note_update(
+    key: { id: $id },
+    where: { userId: { eq_expr: "auth.uid" } },
+    data: {
+      content: $content,
+      updatedAt_expr: "request.time"
+    }
+  ) {
+    id
+  }
+}
+
+query GetPublicNotes($limit: Int = 10, $offset: Int = 0) @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public as it only retrieves non-private notes.") {
+  notes(where: { isPrivate: { eq: false } }, limit: $limit, offset: $offset, orderBy: [{ createdAt: DESC }]) {
+    id
+    title
+    content
+    createdAt
+    user {
+      username
+      displayName
+    }
+  }
+}
