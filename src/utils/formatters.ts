@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { format, parseISO, isValid, startOfMonth, endOfMonth, subMonths, addDays } from 'date-fns';
 import { Currency, CurrencyInfo } from '@/types';
 import { CURRENCIES, DATE_FORMATS } from './constants';

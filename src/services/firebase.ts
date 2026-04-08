@@ -1,6 +1,8 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import {
+  initializeAuth,
   getAuth,
+  getReactNativePersistence,
   GoogleAuthProvider,
   signInWithCredential,
   signOut as firebaseSignOut,
@@ -8,6 +10,7 @@ import {
   User as FirebaseUser,
   Auth,
 } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getFirestore,
   collection,
@@ -26,40 +29,41 @@ import {
   Firestore,
   QueryConstraint,
   DocumentData,
-  enableIndexedDbPersistence,
 } from 'firebase/firestore';
 import { COLLECTIONS } from '@/utils/constants';
 
 // Firebase configuration from environment variables
+// Using require to access process.env in React Native context
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '',
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || '',
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '',
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
 };
 
 // Initialize Firebase
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
+let app: FirebaseApp | undefined;
+let auth: Auth | undefined;
+let db: Firestore | undefined;
 
 export const initializeFirebase = () => {
   if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
+    try {
+      app = initializeApp(firebaseConfig);
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+      db = getFirestore(app);
+      console.log('Firebase initialized successfully');
+    } catch (error) {
+      console.error('Firebase initialization error:', error);
+      throw error;
+    }
 
-    // Enable offline persistence
-    enableIndexedDbPersistence(db).catch((err) => {
-      if (err.code === 'failed-precondition') {
-        console.warn('Multiple tabs open, persistence can only be enabled in one tab.');
-      } else if (err.code === 'unimplemented') {
-        console.warn('Browser does not support persistence.');
-      }
-    });
+    // Persistence is handled by getReactNativePersistence for React Native
   } else {
     app = getApps()[0];
     auth = getAuth(app);
@@ -69,10 +73,28 @@ export const initializeFirebase = () => {
   return { app, auth, db };
 };
 
-// Initialize on import
-initializeFirebase();
+// Lazy initialization - don't call immediately
+let isInitialized = false;
 
-// Export initialized instances
+const ensureInitialized = () => {
+  if (!isInitialized) {
+    initializeFirebase();
+    isInitialized = true;
+  }
+};
+
+// Export initialized instances with lazy initialization
+export const getAuthInstance = (): Auth => {
+  ensureInitialized();
+  return auth!;
+};
+
+export const getDbInstance = (): Firestore => {
+  ensureInitialized();
+  return db!;
+};
+
+// For backward compatibility
 export { auth, db };
 
 // Google Auth Provider
@@ -81,15 +103,15 @@ export const googleProvider = new GoogleAuthProvider();
 // Auth helpers
 export const signInWithGoogle = async (idToken: string) => {
   const credential = GoogleAuthProvider.credential(idToken);
-  return signInWithCredential(auth, credential);
+  return signInWithCredential(getAuthInstance(), credential);
 };
 
 export const signOut = async () => {
-  return firebaseSignOut(auth);
+  return firebaseSignOut(getAuthInstance());
 };
 
 export const onAuthChange = (callback: (user: FirebaseUser | null) => void) => {
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(getAuthInstance(), callback);
 };
 
 // Firestore helpers
@@ -109,7 +131,7 @@ export const createDocument = async <T extends DocumentData>(
   collectionName: string,
   data: T
 ): Promise<string> => {
-  const docRef = await addDoc(collection(db, collectionName), {
+  const docRef = await addDoc(collection(getDbInstance(), collectionName), {
     ...data,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
@@ -122,7 +144,7 @@ export const updateDocument = async <T extends DocumentData>(
   docId: string,
   data: Partial<T>
 ): Promise<void> => {
-  const docRef = doc(db, collectionName, docId);
+  const docRef = doc(getDbInstance(), collectionName, docId);
   await updateDoc(docRef, {
     ...data,
     updatedAt: Timestamp.now(),
@@ -133,7 +155,7 @@ export const deleteDocument = async (
   collectionName: string,
   docId: string
 ): Promise<void> => {
-  const docRef = doc(db, collectionName, docId);
+  const docRef = doc(getDbInstance(), collectionName, docId);
   await deleteDoc(docRef);
 };
 
@@ -141,7 +163,7 @@ export const getDocument = async <T>(
   collectionName: string,
   docId: string
 ): Promise<T | null> => {
-  const docRef = doc(db, collectionName, docId);
+  const docRef = doc(getDbInstance(), collectionName, docId);
   const docSnap = await getDoc(docRef);
   if (docSnap.exists()) {
     return { id: docSnap.id, ...docSnap.data() } as T;
@@ -153,9 +175,9 @@ export const queryDocuments = async <T>(
   collectionName: string,
   ...constraints: QueryConstraint[]
 ): Promise<T[]> => {
-  const q = query(collection(db, collectionName), ...constraints);
+  const q = query(collection(getDbInstance(), collectionName), ...constraints);
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map((doc) => ({
+  return querySnapshot.docs.map((doc: any) => ({
     id: doc.id,
     ...doc.data(),
   })) as T[];
@@ -166,9 +188,9 @@ export const subscribeToCollection = <T>(
   constraints: QueryConstraint[],
   callback: (data: T[]) => void
 ) => {
-  const q = query(collection(db, collectionName), ...constraints);
-  return onSnapshot(q, (snapshot) => {
-    const data = snapshot.docs.map((doc) => ({
+  const q = query(collection(getDbInstance(), collectionName), ...constraints);
+  return onSnapshot(q, (snapshot: any) => {
+    const data = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
     })) as T[];
@@ -182,7 +204,7 @@ export const getUserDocument = async (uid: string) => {
 };
 
 export const createUserDocument = async (uid: string, data: DocumentData) => {
-  const docRef = doc(db, COLLECTIONS.users, uid);
+  const docRef = doc(getDbInstance(), COLLECTIONS.users, uid);
   await setDoc(docRef, {
     ...data,
     createdAt: Timestamp.now(),
@@ -191,7 +213,7 @@ export const createUserDocument = async (uid: string, data: DocumentData) => {
 };
 
 export const updateUserDocument = async (uid: string, data: DocumentData) => {
-  const docRef = doc(db, COLLECTIONS.users, uid);
+  const docRef = doc(getDbInstance(), COLLECTIONS.users, uid);
   await updateDoc(docRef, {
     ...data,
     updatedAt: Timestamp.now(),
@@ -201,7 +223,7 @@ export const updateUserDocument = async (uid: string, data: DocumentData) => {
 // Transaction queries
 export const getUserTransactions = (uid: string) => {
   return query(
-    collection(db, COLLECTIONS.transactions),
+    collection(getDbInstance(), COLLECTIONS.transactions),
     where('uid', '==', uid),
     orderBy('date', 'desc')
   );
@@ -210,7 +232,7 @@ export const getUserTransactions = (uid: string) => {
 // Budget queries
 export const getUserBudgets = (uid: string, month: string) => {
   return query(
-    collection(db, COLLECTIONS.budgets),
+    collection(getDbInstance(), COLLECTIONS.budgets),
     where('uid', '==', uid),
     where('month', '==', month)
   );
@@ -219,7 +241,7 @@ export const getUserBudgets = (uid: string, month: string) => {
 // Work queries
 export const getUserWorks = (uid: string) => {
   return query(
-    collection(db, COLLECTIONS.works),
+    collection(getDbInstance(), COLLECTIONS.works),
     where('uid', '==', uid),
     orderBy('createdAt', 'desc')
   );

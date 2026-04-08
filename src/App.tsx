@@ -9,10 +9,15 @@ import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import RootNavigator from '@/navigation/RootNavigator';
 import { initializeFirebase } from '@/services/firebase';
+// @ts-ignore
 import '../global.css';
 
-// Initialize Firebase
-initializeFirebase();
+// Initialize Firebase with error handling
+try {
+  initializeFirebase();
+} catch (error) {
+  console.error('Failed to initialize Firebase:', error);
+}
 
 // Keep splash screen visible until we're ready
 SplashScreen.preventAutoHideAsync();
