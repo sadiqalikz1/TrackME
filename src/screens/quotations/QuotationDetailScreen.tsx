@@ -10,11 +10,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useTheme, useNotification } from '@/contexts';
+import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Button, Input, Modal } from '@/components/ui';
 import { Quotation } from '@/types';
 import { getQuotationById, updateDocument, deleteDocument } from '@/services/firebase';
-import { COLLECTIONS } from '@/utils/constants';
+import { COLLECTIONS, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
@@ -22,6 +22,7 @@ import * as Sharing from 'expo-sharing';
 
 const QuotationDetailScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const { showSuccess, showError } = useNotification();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -33,6 +34,8 @@ const QuotationDetailScreen: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editStatus, setEditStatus] = useState<Quotation['status']>('pending');
   const [exporting, setExporting] = useState(false);
+
+  const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
   useEffect(() => {
     loadQuotation();
@@ -91,6 +94,8 @@ const QuotationDetailScreen: React.FC = () => {
 
     setExporting(true);
     try {
+      const taxPercentage = quotation.subtotal > 0 ? ((quotation.tax / quotation.subtotal) * 100).toFixed(0) : '0';
+      
       const itemsHTML = quotation.items
         .map(
           (item) =>
@@ -98,8 +103,9 @@ const QuotationDetailScreen: React.FC = () => {
         <tr>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.name}</td>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${item.unitPrice.toFixed(2)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${item.total.toFixed(2)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${currencyInfo.symbol}${item.unitPrice.toFixed(2)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${taxPercentage}%</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${currencyInfo.symbol}${item.total.toFixed(2)}</td>
         </tr>
       `
         )
@@ -125,6 +131,7 @@ const QuotationDetailScreen: React.FC = () => {
               .summary-row.total { font-weight: bold; font-size: 14px; border-top: 2px solid #333; padding-top: 10px; }
               .status-badge { display: inline-block; background-color: #e5e7eb; padding: 5px 10px; border-radius: 3px; font-size: 11px; }
               .footer { margin-top: 30px; font-size: 10px; color: #999; border-top: 1px solid #e5e7eb; padding-top: 10px; text-align: center; }
+              .currency { font-weight: bold; }
             </style>
           </head>
           <body>
@@ -143,10 +150,11 @@ const QuotationDetailScreen: React.FC = () => {
             <table class="details-table">
               <tr>
                 <td><strong>Date:</strong> ${formatDate(new Date())}</td>
-                <td><strong>Valid Until:</strong> ${quotation.validUntil}</td>
+                <td><strong>Currency:</strong> <span class="currency">${currencyInfo.code}</span></td>
               </tr>
               <tr>
-                <td colspan="2"><strong>Status:</strong> <span class="status-badge">${quotation.status.toUpperCase()}</span></td>
+                <td><strong>Valid Until:</strong> ${quotation.validUntil}</td>
+                <td><strong>Status:</strong> <span class="status-badge">${quotation.status.toUpperCase()}</span></td>
               </tr>
               ${quotation.description ? `<tr><td colspan="2"><strong>Description:</strong> ${quotation.description}</td></tr>` : ''}
             </table>
@@ -157,6 +165,7 @@ const QuotationDetailScreen: React.FC = () => {
                   <th>Description</th>
                   <th style="text-align: center;">Quantity</th>
                   <th style="text-align: right;">Unit Price</th>
+                  <th style="text-align: center;">Tax %</th>
                   <th style="text-align: right;">Total</th>
                 </tr>
               </thead>
@@ -168,13 +177,13 @@ const QuotationDetailScreen: React.FC = () => {
             <div class="summary">
               <div class="summary-row">
                 <span>Subtotal:</span>
-                <span>$${quotation.subtotal.toFixed(2)}</span>
+                <span><span class="currency">${currencyInfo.symbol}</span>${quotation.subtotal.toFixed(2)}</span>
               </div>
               ${
                 quotation.tax > 0
                   ? `<div class="summary-row">
-                <span>Tax (${((quotation.tax / quotation.subtotal) * 100).toFixed(0)}%):</span>
-                <span>$${quotation.tax.toFixed(2)}</span>
+                <span>Tax (${taxPercentage}%):</span>
+                <span><span class="currency">${currencyInfo.symbol}</span>${quotation.tax.toFixed(2)}</span>
               </div>`
                   : ''
               }
@@ -182,18 +191,19 @@ const QuotationDetailScreen: React.FC = () => {
                 quotation.discount > 0
                   ? `<div class="summary-row">
                 <span>Discount:</span>
-                <span>-$${quotation.discount.toFixed(2)}</span>
+                <span>-<span class="currency">${currencyInfo.symbol}</span>${quotation.discount.toFixed(2)}</span>
               </div>`
                   : ''
               }
               <div class="summary-row total">
                 <span>Total:</span>
-                <span>$${quotation.total.toFixed(2)}</span>
+                <span><span class="currency">${currencyInfo.symbol}</span>${quotation.total.toFixed(2)}</span>
               </div>
             </div>
 
             <div class="footer">
               <p>This is a quotation generated by TrackME on ${formatDate(new Date(), 'MMMM d, yyyy')}</p>
+              <p>Currency: ${currencyInfo.name} (${currencyInfo.code})</p>
               <p>Thank you for your business!</p>
             </div>
           </body>
