@@ -106,8 +106,8 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
       const quoteDescription = description.trim();
       await onCreateQuotation({
         clientName: clientName.trim(),
-        clientEmail: clientEmail.trim() || undefined,
-        clientPhone: clientPhone.trim() || undefined,
+        clientEmail: clientEmail.trim() || '',
+        clientPhone: clientPhone.trim() || '',
         description: quoteDescription || 'Quotation',
         items: items.map((item) => ({
           ...item,

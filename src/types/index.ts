@@ -112,8 +112,8 @@ export interface Quotation {
   uid: string;
   workId?: string;
   clientName: string;
-  clientEmail?: string;
-  clientPhone?: string;
+  clientEmail: string;
+  clientPhone: string;
   description?: string;
   items: Array<{
     name: string;

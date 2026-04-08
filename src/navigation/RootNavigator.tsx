@@ -122,8 +122,20 @@ const MainTabNavigator = () => {
         },
       })}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Transactions" component={TransactionsScreen} />
+      <Tab.Screen 
+        name="Dashboard" 
+        component={DashboardScreen}
+        options={{
+          tabBarLabel: 'Home',
+        }}
+      />
+      <Tab.Screen 
+        name="Transactions" 
+        component={TransactionsScreen}
+        options={{
+          tabBarLabel: 'Income',
+        }}
+      />
       <Tab.Screen
         name="AddTransaction"
         component={View}
@@ -131,20 +143,31 @@ const MainTabNavigator = () => {
           tabBarLabel: '',
           tabBarButton: (props) => (
             <AddTabButton onPress={() => {
-              // Navigate to transactions and open add modal
-              // This is handled in TransactionsScreen
+              // This will be handled by listeners
             }} />
           ),
         }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
             e.preventDefault();
-            navigation.navigate('Transactions', { openAddModal: true });
+            (navigation as any).navigate('Transactions', { openAddModal: true });
           },
         })}
       />
-      <Tab.Screen name="Work" component={WorkStackNavigator} />
-      <Tab.Screen name="More" component={MoreStackNavigator} />
+      <Tab.Screen 
+        name="Work" 
+        component={WorkStackNavigator}
+        options={{
+          tabBarLabel: 'Work',
+        }}
+      />
+      <Tab.Screen 
+        name="More" 
+        component={MoreStackNavigator}
+        options={{
+          tabBarLabel: 'Menu',
+        }}
+      />
     </Tab.Navigator>
   );
 };

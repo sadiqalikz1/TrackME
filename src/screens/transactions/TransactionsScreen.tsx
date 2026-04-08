@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRoute } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Input, Modal, Button, CategoryGrid, EmptyState } from '@/components/ui';
 import { TransactionItem } from '@/components/common';
@@ -25,6 +26,7 @@ const TransactionsScreen: React.FC = () => {
   const { user } = useAuth();
   const { showSuccess, showError } = useNotification();
   const insets = useSafeAreaInsets();
+  const route = useRoute();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +53,16 @@ const TransactionsScreen: React.FC = () => {
 
     return () => unsubscribe();
   }, [user]);
+
+  // Handle opening add modal from navigation
+  useEffect(() => {
+    const openModalParam = (route.params as any)?.openAddModal;
+    if (openModalParam) {
+      setTimeout(() => {
+        openAddModal();
+      }, 100);
+    }
+  }, [route.params]);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
