@@ -310,3 +310,17 @@ export const getWorkById = async (id: string): Promise<Work | null> => {
   }
   return null;
 };
+
+export const getQuotationById = async (id: string): Promise<any | null> => {
+  const db = getFirebaseDb();
+  const docRef = doc(db, COLLECTIONS.QUOTATIONS, id);
+  const docSnap = await getDoc(docRef);
+  
+  if (docSnap.exists()) {
+    return {
+      id: docSnap.id,
+      ...convertTimestamp(docSnap.data()),
+    };
+  }
+  return null;
+};

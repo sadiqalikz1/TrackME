@@ -146,7 +146,7 @@ const QuotationsScreen: React.FC = () => {
         <TouchableOpacity 
           style={[styles.actionButton, { backgroundColor: colors.primary + '20' }]}
           onPress={() => {
-            // TODO: View quotation details
+            (navigation as any).navigate('QuotationDetail', { quotationId: item.id });
           }}
         >
           <Ionicons name="eye" size={18} color={colors.primary} />

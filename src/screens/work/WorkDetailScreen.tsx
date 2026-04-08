@@ -23,9 +23,8 @@ import {
   ProfitTransferModal,
   TimeEntryModal,
   DetailedExpenseModal,
-  QuotationModal,
 } from '@/components/ui';
-import { Work, Transaction, TransactionCategory, DetailedExpense, TimeEntry, Quotation } from '@/types';
+import { Work, Transaction, TransactionCategory, DetailedExpense, TimeEntry } from '@/types';
 import { getWorkById, updateDocument, deleteDocument, createDocument } from '@/services/firebase';
 import { WORK_CATEGORIES, STATUS_COLORS, COLLECTIONS, EXPENSE_TYPES } from '@/utils/constants';
 import { formatCurrency, formatDate, formatPercentage, calculateProfit } from '@/utils/formatters';
@@ -47,7 +46,6 @@ const WorkDetailScreen: React.FC = () => {
   const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [timeModalVisible, setTimeModalVisible] = useState(false);
   const [expenseModalVisible, setExpenseModalVisible] = useState(false);
-  const [quotationModalVisible, setQuotationModalVisible] = useState(false);
 
   const currency = user?.currency || 'USD';
 
@@ -326,20 +324,6 @@ const WorkDetailScreen: React.FC = () => {
     }
   };
 
-  const handleCreateQuotation = async (quotation: Omit<Quotation, 'id' | 'uid' | 'createdAt' | 'updatedAt'>) => {
-    try {
-      const quoteData: Omit<Quotation, 'id' | 'createdAt' | 'updatedAt'> = {
-        ...quotation,
-        uid: user!.uid,
-        workId: work?.id,
-      };
-
-      await createDocument(COLLECTIONS.QUOTATIONS, quoteData);
-      showSuccess('Quotation created successfully!');
-    } catch (error) {
-      showError('Failed to create quotation');
-    }
-  };
 
   const handleDelete = () => {
     Alert.alert('Delete Project', 'This action cannot be undone.', [
@@ -573,22 +557,6 @@ const WorkDetailScreen: React.FC = () => {
           />
         </Card>
 
-        {/* Quotation */}
-        <Card style={styles.card}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Quotation</Text>
-            <TouchableOpacity onPress={() => setQuotationModalVisible(true)}>
-              <Ionicons name="document-text" size={24} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-          <Button
-            title="Create Quotation"
-            variant="secondary"
-            onPress={() => setQuotationModalVisible(true)}
-            icon={<Ionicons name="create" size={18} color={colors.primary} />}
-          />
-        </Card>
-
         {/* Description */}
         {work.description && (
           <Card style={styles.card}>
@@ -680,12 +648,6 @@ const WorkDetailScreen: React.FC = () => {
         onClose={() => setExpenseModalVisible(false)}
         onAddExpense={handleAddExpense}
         onRemoveExpense={handleRemoveExpense}
-      />
-
-      <QuotationModal
-        visible={quotationModalVisible}
-        onClose={() => setQuotationModalVisible(false)}
-        onCreateQuotation={handleCreateQuotation}
       />
     </View>
   );
