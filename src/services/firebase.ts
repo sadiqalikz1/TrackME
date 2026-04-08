@@ -166,15 +166,36 @@ export const subscribeToCollection = <T>(
 ) => {
   const db = getFirebaseDb();
   const collectionRef = collection(db, collectionName);
-  const q = query(collectionRef, where('uid', '==', uid), ...constraints);
+  // Only use uid filter, sort client-side to avoid composite indexes
+  const q = query(collectionRef, where('uid', '==', uid));
   
-  return onSnapshot(q, (snapshot) => {
-    const data = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...convertTimestamp(doc.data()),
-    })) as T[];
-    callback(data);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      let data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...convertTimestamp(doc.data()),
+      })) as T[];
+      
+      // Apply sorting client-side
+      data = data.sort((a: any, b: any) => {
+        // Look for date or deadline fields
+        const aVal = a.date || a.deadline || a.createdAt || 0;
+        const bVal = b.date || b.deadline || b.createdAt || 0;
+        
+        if (aVal instanceof Date && bVal instanceof Date) {
+          return bVal.getTime() - aVal.getTime(); // descending
+        }
+        return 0;
+      });
+      
+      callback(data);
+    },
+    (error) => {
+      console.error(`Error fetching ${collectionName}:`, error);
+      callback([]);
+    }
+  );
 };
 
 export const createDocument = async <T extends { uid: string }>(
@@ -227,8 +248,7 @@ export const getUserTransactions = (uid: string, callback: (transactions: Transa
   return subscribeToCollection<Transaction>(
     COLLECTIONS.TRANSACTIONS,
     uid,
-    callback,
-    [orderBy('date', 'desc')]
+    callback
   );
 };
 
@@ -244,8 +264,7 @@ export const getUserWorks = (uid: string, callback: (works: Work[]) => void) => 
   return subscribeToCollection<Work>(
     COLLECTIONS.WORKS,
     uid,
-    callback,
-    [orderBy('createdAt', 'desc')]
+    callback
   );
 };
 
@@ -253,8 +272,7 @@ export const getUserGoals = (uid: string, callback: (goals: Goal[]) => void) => 
   return subscribeToCollection<Goal>(
     COLLECTIONS.GOALS,
     uid,
-    callback,
-    [orderBy('deadline', 'asc')]
+    callback
   );
 };
 
@@ -262,8 +280,7 @@ export const getUserBillReminders = (uid: string, callback: (reminders: BillRemi
   return subscribeToCollection<BillReminder>(
     COLLECTIONS.BILL_REMINDERS,
     uid,
-    callback,
-    [orderBy('dueDate', 'asc')]
+    callback
   );
 };
 

@@ -86,6 +86,7 @@ export interface Work {
   quotationAmount: number;
   finalAmount: number;
   workingCost: number;
+  materialCost: number;
   expenses: number;
   profit: number;
   progress: number; // 0-100

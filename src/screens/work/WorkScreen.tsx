@@ -41,6 +41,7 @@ const WorkScreen: React.FC = () => {
   const [status, setStatus] = useState<WorkStatus>('pending');
   const [quotation, setQuotation] = useState('');
   const [workingCost, setWorkingCost] = useState('');
+  const [materialCost, setMaterialCost] = useState('');
   const [expenses, setExpenses] = useState('');
   const [progress, setProgress] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -80,6 +81,7 @@ const WorkScreen: React.FC = () => {
     setStatus('pending');
     setQuotation('');
     setWorkingCost('');
+    setMaterialCost('');
     setExpenses('');
     setProgress(0);
     setModalVisible(true);
@@ -93,6 +95,7 @@ const WorkScreen: React.FC = () => {
     setStatus(work.status);
     setQuotation(work.quotationAmount.toString());
     setWorkingCost(work.workingCost.toString());
+    setMaterialCost(work.materialCost?.toString() || '');
     setExpenses(work.expenses.toString());
     setProgress(work.progress);
     setModalVisible(true);
@@ -106,8 +109,9 @@ const WorkScreen: React.FC = () => {
 
     const parsedQuotation = parseCurrencyInput(quotation) || 0;
     const parsedWorkingCost = parseCurrencyInput(workingCost) || 0;
+    const parsedMaterialCost = parseCurrencyInput(materialCost) || 0;
     const parsedExpenses = parseCurrencyInput(expenses) || 0;
-    const profit = calculateProfit(parsedQuotation, parsedWorkingCost, parsedExpenses);
+    const profit = calculateProfit(parsedQuotation, parsedWorkingCost + parsedMaterialCost, parsedExpenses);
 
     setSaving(true);
     try {
@@ -120,6 +124,7 @@ const WorkScreen: React.FC = () => {
         quotationAmount: parsedQuotation,
         finalAmount: parsedQuotation,
         workingCost: parsedWorkingCost,
+        materialCost: parsedMaterialCost,
         expenses: parsedExpenses,
         profit,
         progress,
@@ -378,6 +383,13 @@ const WorkScreen: React.FC = () => {
           label="Working Cost"
           value={workingCost}
           onChangeText={setWorkingCost}
+          placeholder="0.00"
+          keyboardType="decimal-pad"
+        />
+        <Input
+          label="Material Cost"
+          value={materialCost}
+          onChangeText={setMaterialCost}
           placeholder="0.00"
           keyboardType="decimal-pad"
         />

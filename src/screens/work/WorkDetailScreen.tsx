@@ -251,6 +251,17 @@ const WorkDetailScreen: React.FC = () => {
               </Text>
             </View>
             <View style={styles.financialItem}>
+              <Text style={[styles.financialLabel, { color: colors.textMuted }]}>Material Cost</Text>
+              <Text style={[styles.financialValue, { color: colors.danger }]}>
+                -{formatCurrency(work.materialCost || 0, currency)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <View style={styles.financialRow}>
+            <View style={styles.financialItem}>
               <Text style={[styles.financialLabel, { color: colors.textMuted }]}>Expenses</Text>
               <Text style={[styles.financialValue, { color: colors.danger }]}>
                 -{formatCurrency(work.expenses, currency)}
