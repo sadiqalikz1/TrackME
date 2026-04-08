@@ -4,37 +4,37 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  auth, 
-  db, 
-  googleProvider, 
-  signInWithPopup, 
-  signOut, 
-  onAuthStateChanged, 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
+import {
+  auth,
+  db,
+  googleProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
   Timestamp,
   FirebaseUser,
   handleFirestoreError,
   OperationType
 } from './firebase';
-import { 
-  LayoutDashboard, 
-  PlusCircle, 
-  History, 
-  Settings, 
-  LogOut, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  LayoutDashboard,
+  PlusCircle,
+  History,
+  Settings,
+  LogOut,
+  TrendingUp,
+  TrendingDown,
   Wallet,
   PieChart as PieChartIcon,
   Plus,
@@ -52,7 +52,17 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Download,
+  Upload,
+  Moon,
+  Sun,
+  Bell,
+  Target,
+  Tag,
+  Repeat,
+  FileText,
+  MoreVertical
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -106,6 +116,34 @@ interface UserProfile {
   email: string;
   displayName: string;
   currency: string;
+  theme?: 'light' | 'dark' | 'system';
+  budgetAlertThreshold?: number;
+}
+
+interface RecurringTransaction {
+  id: string;
+  uid: string;
+  amount: number;
+  type: 'income' | 'expense';
+  category: string;
+  note?: string;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  startDate: Date;
+  endDate?: Date;
+  lastGenerated?: Date;
+  active: boolean;
+  createdAt: Date;
+}
+
+interface SavingsGoal {
+  id: string;
+  uid: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline?: Date;
+  color: string;
+  createdAt: Date;
 }
 
 interface Work {
@@ -158,10 +196,13 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [works, setWorks] = useState<Work[]>([]);
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'budgets' | 'analysis' | 'works' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'budgets' | 'analysis' | 'works' | 'settings' | 'goals'>('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isWorkModalOpen, setIsWorkModalOpen] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ 
@@ -272,12 +313,147 @@ export default function App() {
       setWorks(ws);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'works'));
 
+    const rQuery = query(
+      collection(db, 'recurring'),
+      where('uid', '==', user.uid)
+    );
+
+    const unsubscribeRecurring = onSnapshot(rQuery, (snap) => {
+      const rs = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          startDate: data.startDate?.toDate(),
+          endDate: data.endDate?.toDate(),
+          lastGenerated: data.lastGenerated?.toDate(),
+          createdAt: data.createdAt.toDate()
+        } as RecurringTransaction;
+      });
+      setRecurringTransactions(rs);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'recurring'));
+
+    const gQuery = query(
+      collection(db, 'goals'),
+      where('uid', '==', user.uid)
+    );
+
+    const unsubscribeGoals = onSnapshot(gQuery, (snap) => {
+      const gs = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          deadline: data.deadline?.toDate(),
+          createdAt: data.createdAt.toDate()
+        } as SavingsGoal;
+      });
+      setSavingsGoals(gs);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'goals'));
+
     return () => {
       unsubscribeTransactions();
       unsubscribeBudgets();
       unsubscribeWorks();
+      unsubscribeRecurring();
+      unsubscribeGoals();
     };
   }, [user]);
+
+  // Theme Management
+  useEffect(() => {
+    const savedTheme = profile?.theme || 'light';
+    if (savedTheme === 'system') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setTheme(prefersDark ? 'dark' : 'light');
+    } else {
+      setTheme(savedTheme);
+    }
+
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [profile?.theme, theme]);
+
+  // Export Data Functions
+  const exportToCSV = () => {
+    const csvRows = [];
+    csvRows.push(['Date', 'Type', 'Category', 'Amount', 'Note'].join(','));
+
+    transactions.forEach(t => {
+      const row = [
+        format(t.date, 'yyyy-MM-dd'),
+        t.type,
+        t.category,
+        t.amount,
+        t.note || ''
+      ].map(val => `"${val}"`).join(',');
+      csvRows.push(row);
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `financeflow-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification('Data exported successfully');
+  };
+
+  const exportToJSON = () => {
+    const data = {
+      transactions: transactions.map(t => ({
+        ...t,
+        date: format(t.date, 'yyyy-MM-dd'),
+        createdAt: format(t.createdAt, 'yyyy-MM-dd\'T\'HH:mm:ss')
+      })),
+      budgets,
+      works: works.map(w => ({
+        ...w,
+        startDate: w.startDate ? format(w.startDate, 'yyyy-MM-dd') : null,
+        endDate: w.endDate ? format(w.endDate, 'yyyy-MM-dd') : null,
+        createdAt: format(w.createdAt, 'yyyy-MM-dd\'T\'HH:mm:ss')
+      })),
+      recurringTransactions: recurringTransactions.map(r => ({
+        ...r,
+        startDate: format(r.startDate, 'yyyy-MM-dd'),
+        endDate: r.endDate ? format(r.endDate, 'yyyy-MM-dd') : null,
+        lastGenerated: r.lastGenerated ? format(r.lastGenerated, 'yyyy-MM-dd') : null,
+        createdAt: format(r.createdAt, 'yyyy-MM-dd\'T\'HH:mm:ss')
+      })),
+      savingsGoals: savingsGoals.map(g => ({
+        ...g,
+        deadline: g.deadline ? format(g.deadline, 'yyyy-MM-dd') : null,
+        createdAt: format(g.createdAt, 'yyyy-MM-dd\'T\'HH:mm:ss')
+      })),
+      exportDate: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `financeflow-backup-${format(new Date(), 'yyyy-MM-dd')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification('Backup created successfully');
+  };
+
+  const toggleTheme = async () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    if (user) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { theme: newTheme });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    }
+  };
 
   const handleLogin = async () => {
     try {
@@ -337,53 +513,77 @@ export default function App() {
           </div>
 
           <div className="flex-1 space-y-2">
-            <NavButton 
-              active={activeTab === 'dashboard'} 
+            <NavButton
+              active={activeTab === 'dashboard'}
               onClick={() => setActiveTab('dashboard')}
               icon={<LayoutDashboard className="w-5 h-5" />}
               label="Dashboard"
             />
-            <NavButton 
-              active={activeTab === 'works'} 
+            <NavButton
+              active={activeTab === 'works'}
               onClick={() => setActiveTab('works')}
               icon={<Briefcase className="w-5 h-5" />}
               label="Work Tracking"
             />
-            <NavButton 
-              active={activeTab === 'transactions'} 
+            <NavButton
+              active={activeTab === 'transactions'}
               onClick={() => setActiveTab('transactions')}
               icon={<History className="w-5 h-5" />}
               label="History & Search"
             />
-            <NavButton 
-              active={activeTab === 'analysis'} 
+            <NavButton
+              active={activeTab === 'analysis'}
               onClick={() => setActiveTab('analysis')}
               icon={<LineChart className="w-5 h-5" />}
               label="Detailed Analysis"
             />
-            <NavButton 
-              active={activeTab === 'budgets'} 
+            <NavButton
+              active={activeTab === 'budgets'}
               onClick={() => setActiveTab('budgets')}
               icon={<PieChartIcon className="w-5 h-5" />}
               label="Budgets"
             />
-            <NavButton 
-              active={activeTab === 'settings'} 
+            <NavButton
+              active={activeTab === 'goals'}
+              onClick={() => setActiveTab('goals')}
+              icon={<Target className="w-5 h-5" />}
+              label="Savings Goals"
+            />
+            <NavButton
+              active={activeTab === 'settings'}
               onClick={() => setActiveTab('settings')}
               icon={<Settings className="w-5 h-5" />}
               label="Settings"
             />
           </div>
 
-          <div className="pt-6 border-t border-stone-100 mt-auto">
-            <div className="flex items-center gap-3 px-3 py-4 mb-4 bg-stone-50 rounded-2xl">
+          <div className="pt-6 border-t border-stone-100 mt-auto space-y-3">
+            <div className="flex gap-2">
+              <button
+                onClick={toggleTheme}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all"
+                title="Toggle theme"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                <span className="text-xs font-medium">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+              </button>
+              <button
+                onClick={exportToJSON}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all"
+                title="Export data"
+              >
+                <Download className="w-4 h-4" />
+                <span className="text-xs font-medium">Export</span>
+              </button>
+            </div>
+            <div className="flex items-center gap-3 px-3 py-4 bg-stone-50 rounded-2xl">
               <img src={user.photoURL || ''} className="w-10 h-10 rounded-full border border-stone-200" alt="User" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{user.displayName}</p>
                 <p className="text-xs text-stone-500 truncate">{user.email}</p>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-3 text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
             >
@@ -396,12 +596,13 @@ export default function App() {
         {/* Main Content */}
         <main className="flex-1 p-6 lg:p-10 overflow-y-auto max-h-screen">
           <AnimatePresence mode="wait">
-            {activeTab === 'dashboard' && <Dashboard transactions={transactions} budgets={budgets} currency={profile?.currency || 'USD'} />}
+            {activeTab === 'dashboard' && <Dashboard transactions={transactions} budgets={budgets} currency={profile?.currency || 'USD'} savingsGoals={savingsGoals} />}
             {activeTab === 'transactions' && <TransactionsView transactions={transactions} currency={profile?.currency || 'USD'} />}
             {activeTab === 'budgets' && <BudgetsView transactions={transactions} budgets={budgets} currency={profile?.currency || 'USD'} />}
             {activeTab === 'analysis' && <AnalysisView transactions={transactions} currency={profile?.currency || 'USD'} />}
             {activeTab === 'works' && <WorkTrackingView works={works} currency={profile?.currency || 'USD'} />}
-            {activeTab === 'settings' && <SettingsView profile={profile} uid={user.uid} />}
+            {activeTab === 'goals' && <SavingsGoalsView goals={savingsGoals} transactions={transactions} currency={profile?.currency || 'USD'} uid={user.uid} />}
+            {activeTab === 'settings' && <SettingsView profile={profile} uid={user.uid} onExportCSV={exportToCSV} onExportJSON={exportToJSON} recurringTransactions={recurringTransactions} />}
           </AnimatePresence>
         </main>
 
@@ -492,7 +693,7 @@ export default function App() {
 
 // --- Sub-Views ---
 
-function Dashboard({ transactions, budgets, currency }: { transactions: Transaction[], budgets: Budget[], currency: string }) {
+function Dashboard({ transactions, budgets, currency, savingsGoals }: { transactions: Transaction[], budgets: Budget[], currency: string, savingsGoals: SavingsGoal[] }) {
   const currentMonth = format(new Date(), 'yyyy-MM');
   const monthTransactions = transactions.filter(t => format(t.date, 'yyyy-MM') === currentMonth);
   
@@ -642,6 +843,47 @@ function Dashboard({ transactions, budgets, currency }: { transactions: Transact
           )}
         </div>
       </div>
+
+      {/* Savings Goals Preview */}
+      {savingsGoals.length > 0 && (
+        <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="p-8 border-b border-stone-100">
+            <h3 className="text-lg font-bold">Savings Goals Progress</h3>
+          </div>
+          <div className="p-8 space-y-6">
+            {savingsGoals.slice(0, 3).map(goal => {
+              const progress = (goal.currentAmount / goal.targetAmount) * 100;
+              return (
+                <div key={goal.id}>
+                  <div className="flex justify-between mb-2">
+                    <span className="font-medium">{goal.name}</span>
+                    <span className="text-sm text-stone-500">
+                      {formatCurrency(goal.currentAmount, currency)} / {formatCurrency(goal.targetAmount, currency)}
+                    </span>
+                  </div>
+                  <div className="w-full h-3 bg-stone-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full transition-all rounded-full"
+                      style={{
+                        width: `${Math.min(progress, 100)}%`,
+                        backgroundColor: goal.color
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-xs text-stone-400">{progress.toFixed(1)}% complete</span>
+                    {goal.deadline && (
+                      <span className="text-xs text-stone-400">
+                        Due {format(goal.deadline, 'MMM dd, yyyy')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -1451,7 +1693,7 @@ function AddBudgetModal({ onClose, uid }: { onClose: () => void, uid: string }) 
   );
 }
 
-function SettingsView({ profile, uid }: { profile: UserProfile | null, uid: string }) {
+function SettingsView({ profile, uid, onExportCSV, onExportJSON, recurringTransactions }: { profile: UserProfile | null, uid: string, onExportCSV: () => void, onExportJSON: () => void, recurringTransactions: RecurringTransaction[] }) {
   const [currency, setCurrency] = useState(profile?.currency || 'USD');
   const [submitting, setSubmitting] = useState(false);
   const { showNotification } = useNotification();
@@ -1499,13 +1741,79 @@ function SettingsView({ profile, uid }: { profile: UserProfile | null, uid: stri
             </select>
           </div>
 
-          <button 
+          <button
             disabled={submitting}
             className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold text-lg hover:bg-stone-800 transition-all disabled:opacity-50"
           >
             {submitting ? 'Saving...' : 'Save Settings'}
           </button>
         </form>
+      </div>
+
+      {/* Export Data Section */}
+      <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+        <div>
+          <h3 className="text-lg font-bold mb-1">Export & Backup</h3>
+          <p className="text-sm text-stone-500">Download your financial data for backup or analysis.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={onExportCSV}
+            className="flex items-center justify-center gap-3 py-4 bg-stone-100 hover:bg-stone-200 rounded-2xl font-bold transition-all"
+          >
+            <FileText className="w-5 h-5" />
+            Export as CSV
+          </button>
+          <button
+            onClick={onExportJSON}
+            className="flex items-center justify-center gap-3 py-4 bg-stone-100 hover:bg-stone-200 rounded-2xl font-bold transition-all"
+          >
+            <Download className="w-5 h-5" />
+            Full Backup (JSON)
+          </button>
+        </div>
+      </div>
+
+      {/* Recurring Transactions Section */}
+      <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+        <div>
+          <h3 className="text-lg font-bold mb-1">Recurring Transactions</h3>
+          <p className="text-sm text-stone-500">Manage your automatic recurring income and expenses.</p>
+        </div>
+        {recurringTransactions.length > 0 ? (
+          <div className="space-y-3">
+            {recurringTransactions.map(rt => (
+              <div key={rt.id} className="flex items-center justify-between p-4 bg-stone-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center",
+                    rt.type === 'income' ? "bg-emerald-100" : "bg-red-100"
+                  )}>
+                    <Repeat className={cn(
+                      "w-5 h-5",
+                      rt.type === 'income' ? "text-emerald-600" : "text-red-600"
+                    )} />
+                  </div>
+                  <div>
+                    <p className="font-medium">{rt.category}</p>
+                    <p className="text-sm text-stone-500 capitalize">{rt.frequency} • {formatCurrency(rt.amount, profile?.currency || 'USD')}</p>
+                  </div>
+                </div>
+                <div className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold",
+                  rt.active ? "bg-emerald-100 text-emerald-700" : "bg-stone-200 text-stone-500"
+                )}>
+                  {rt.active ? 'Active' : 'Paused'}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-stone-400 border-2 border-dashed border-stone-200 rounded-2xl">
+            <Repeat className="w-10 h-10 mx-auto mb-2 opacity-20" />
+            <p>No recurring transactions set up yet.</p>
+          </div>
+        )}
       </div>
     </motion.div>
   );
