@@ -115,7 +115,7 @@ const WorkScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      const workData = {
+      const workData: any = {
         uid: user!.uid,
         title: title.trim(),
         description: description.trim(),
@@ -131,8 +131,11 @@ const WorkScreen: React.FC = () => {
         photos: editingWork?.photos || [],
         isProfitTransferred: editingWork?.isProfitTransferred || false,
         startDate: editingWork?.startDate || new Date(),
-        endDate: status === 'completed' ? new Date() : undefined,
       };
+
+      if (status === 'completed') {
+        workData.endDate = new Date();
+      }
 
       if (editingWork) {
         await updateDocument(COLLECTIONS.WORKS, editingWork.id, workData);
@@ -144,7 +147,8 @@ const WorkScreen: React.FC = () => {
 
       setModalVisible(false);
     } catch (error) {
-      showError('Failed to save project');
+      console.error('Save error:', error);
+      showError(error instanceof Error ? error.message : 'Failed to save project');
     } finally {
       setSaving(false);
     }

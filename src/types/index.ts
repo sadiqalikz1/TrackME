@@ -13,7 +13,7 @@ export interface User {
 }
 
 // Currency Types
-export type Currency = 'USD' | 'EUR' | 'GBP' | 'INR' | 'JPY' | 'LKR';
+export type Currency = 'USD' | 'EUR' | 'GBP' | 'INR' | 'JPY' | 'LKR' | 'SAR' | 'AED' | 'PKR' | 'BDT' | 'SGD' | 'HKD' | 'CAD' | 'AUD' | 'NZD';
 
 export interface CurrencyInfo {
   code: Currency;

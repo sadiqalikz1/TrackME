@@ -45,6 +45,15 @@ export const CURRENCIES: CurrencyInfo[] = [
   { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
   { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
   { code: 'LKR', symbol: 'Rs', name: 'Sri Lankan Rupee' },
+  { code: 'SAR', symbol: 'ر.س', name: 'Saudi Riyal' },
+  { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham' },
+  { code: 'PKR', symbol: '₨', name: 'Pakistani Rupee' },
+  { code: 'BDT', symbol: '৳', name: 'Bangladeshi Taka' },
+  { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
+  { code: 'HKD', symbol: 'HK$', name: 'Hong Kong Dollar' },
+  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  { code: 'NZD', symbol: 'NZ$', name: 'New Zealand Dollar' },
 ];
 
 // Frequency Options

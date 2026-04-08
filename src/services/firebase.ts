@@ -202,17 +202,29 @@ export const createDocument = async <T extends { uid: string }>(
   collectionName: string,
   data: Omit<T, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<string> => {
-  const db = getFirebaseDb();
-  const collectionRef = collection(db, collectionName);
-  
-  const docData = {
-    ...data,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  };
-  
-  const docRef = await addDoc(collectionRef, docData);
-  return docRef.id;
+  try {
+    const db = getFirebaseDb();
+    if (!db) {
+      throw new Error('Firestore not initialized');
+    }
+    
+    const collectionRef = collection(db, collectionName);
+    
+    const docData = {
+      ...data,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    };
+    
+    console.log(`Creating ${collectionName} document:`, docData);
+    
+    const docRef = await addDoc(collectionRef, docData);
+    console.log(`Successfully created ${collectionName} with ID: ${docRef.id}`);
+    return docRef.id;
+  } catch (error) {
+    console.error(`Create document error (${collectionName}):`, error);
+    throw error;
+  }
 };
 
 export const updateDocument = async <T>(
