@@ -12,6 +12,7 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
 } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getFirestore,
   collection,
@@ -36,13 +37,13 @@ import { User, Transaction, Budget, Work, Goal, BillReminder, RecurringTransacti
 
 // Firebase configuration from environment variables
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '',
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || '',
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '',
-  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
+  apiKey: 'AIzaSyDlZMjO_HxeD79X_UghdllYNEerhy4nyDo',
+  authDomain: 'trackme-fb2d4.firebaseapp.com',
+  projectId: 'trackme-fb2d4',
+  storageBucket: 'trackme-fb2d4.firebasestorage.app',
+  messagingSenderId: '739292313003',
+  appId: '1:739292313003:android:2f790a5120efbfd4c14eee',
+  measurementId: 'G-L6KCNH4N5J',
 };
 
 // Initialize Firebase
