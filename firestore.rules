@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow authenticated users to read/write their own data
+    // All collections follow the pattern: uid field must match auth.uid
+    
+    match /users/{userId} {
+      allow read, write: if request.auth.uid == userId;
+    }
+    
+    match /transactions/{document=**} {
+      allow read, write: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    
+    match /budgets/{document=**} {
+      allow read, write: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    
+    match /works/{document=**} {
+      allow read, write: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    
+    match /goals/{document=**} {
+      allow read, write: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    
+    match /billReminders/{document=**} {
+      allow read, write: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    
+    match /recurringTransactions/{document=**} {
+      allow read, write: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    
+    match /quotations/{document=**} {
+      allow read, write: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    
+    match /timeEntries/{document=**} {
+      allow read, write: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+  }
+}
