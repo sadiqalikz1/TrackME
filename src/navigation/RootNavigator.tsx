@@ -18,6 +18,7 @@ import WorkDetailScreen from '@/screens/work/WorkDetailScreen';
 import MoreMenuScreen from '@/screens/more/MoreMenuScreen';
 import BudgetsScreen from '@/screens/budgets/BudgetsScreen';
 import GoalsScreen from '@/screens/goals/GoalsScreen';
+import QuotationsScreen from '@/screens/quotations/QuotationsScreen';
 import AnalysisScreen from '@/screens/analysis/AnalysisScreen';
 import SettingsScreen from '@/screens/settings/SettingsScreen';
 import BillRemindersScreen from '@/screens/settings/BillRemindersScreen';
@@ -58,6 +59,7 @@ const MoreStackNavigator = () => {
       <MoreStack.Screen name="MoreMenu" component={MoreMenuScreen} />
       <MoreStack.Screen name="Budgets" component={BudgetsScreen} />
       <MoreStack.Screen name="Goals" component={GoalsScreen} />
+      <MoreStack.Screen name="Quotations" component={QuotationsScreen} />
       <MoreStack.Screen name="Analysis" component={AnalysisScreen} />
       <MoreStack.Screen name="Settings" component={SettingsScreen} />
       <MoreStack.Screen name="BillReminders" component={BillRemindersScreen} />

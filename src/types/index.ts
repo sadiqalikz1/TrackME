@@ -144,6 +144,7 @@ export interface Work {
   workingCost: number;
   materialCost: number;
   transportationCost: number;
+  laborCost: number;
   otherExpenses: number;
   expenses: number;
   detailedExpenses: DetailedExpense[];

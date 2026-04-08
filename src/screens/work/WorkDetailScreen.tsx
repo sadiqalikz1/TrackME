@@ -232,10 +232,13 @@ const WorkDetailScreen: React.FC = () => {
     const transportTotal = detailedExpenses
       .filter((e) => e.type === 'transportation')
       .reduce((sum, e) => sum + e.amount, 0);
+    const laborTotal = detailedExpenses
+      .filter((e) => e.type === 'labor')
+      .reduce((sum, e) => sum + e.amount, 0);
     const otherTotal = detailedExpenses
       .filter((e) => e.type === 'other')
       .reduce((sum, e) => sum + e.amount, 0);
-    const totalExpenses = materialTotal + transportTotal + otherTotal;
+    const totalExpenses = materialTotal + transportTotal + laborTotal + otherTotal;
 
     try {
       const profit = calculateProfit(
@@ -248,6 +251,7 @@ const WorkDetailScreen: React.FC = () => {
         detailedExpenses,
         materialCost: materialTotal,
         transportationCost: transportTotal,
+        laborCost: laborTotal,
         otherExpenses: otherTotal,
         expenses: totalExpenses,
         profit,
@@ -258,6 +262,7 @@ const WorkDetailScreen: React.FC = () => {
         detailedExpenses,
         materialCost: materialTotal,
         transportationCost: transportTotal,
+        laborCost: laborTotal,
         otherExpenses: otherTotal,
         expenses: totalExpenses,
         profit,
@@ -279,10 +284,13 @@ const WorkDetailScreen: React.FC = () => {
     const transportTotal = detailedExpenses
       .filter((e) => e.type === 'transportation')
       .reduce((sum, e) => sum + e.amount, 0);
+    const laborTotal = detailedExpenses
+      .filter((e) => e.type === 'labor')
+      .reduce((sum, e) => sum + e.amount, 0);
     const otherTotal = detailedExpenses
       .filter((e) => e.type === 'other')
       .reduce((sum, e) => sum + e.amount, 0);
-    const totalExpenses = materialTotal + transportTotal + otherTotal;
+    const totalExpenses = materialTotal + transportTotal + laborTotal + otherTotal;
 
     try {
       const profit = calculateProfit(
@@ -295,6 +303,7 @@ const WorkDetailScreen: React.FC = () => {
         detailedExpenses,
         materialCost: materialTotal,
         transportationCost: transportTotal,
+        laborCost: laborTotal,
         otherExpenses: otherTotal,
         expenses: totalExpenses,
         profit,
@@ -305,6 +314,7 @@ const WorkDetailScreen: React.FC = () => {
         detailedExpenses,
         materialCost: materialTotal,
         transportationCost: transportTotal,
+        laborCost: laborTotal,
         otherExpenses: otherTotal,
         expenses: totalExpenses,
         profit,

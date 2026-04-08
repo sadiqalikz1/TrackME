@@ -33,6 +33,14 @@ const menuItems: MenuItem[] = [
     screen: 'Goals',
   },
   {
+    id: 'quotations',
+    icon: 'document-text',
+    label: 'Quotations',
+    description: 'Manage project quotations',
+    color: '#3b82f6',
+    screen: 'Quotations',
+  },
+  {
     id: 'analysis',
     icon: 'analytics',
     label: 'Analysis',
