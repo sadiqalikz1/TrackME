@@ -66,7 +66,7 @@ const MoreStackNavigator = () => {
 };
 
 // Custom Tab Bar Button for Add Transaction
-const AddTabButton: React.FC<{ onPress: () => void }> = ({ onPress }) => {
+const AddTabButton: React.FC<{ onPress?: (e?: any) => void }> = ({ onPress }) => {
   const { colors } = useTheme();
 
   return (
@@ -141,11 +141,7 @@ const MainTabNavigator = () => {
         component={View}
         options={{
           tabBarLabel: '',
-          tabBarButton: (props) => (
-            <AddTabButton onPress={() => {
-              // This will be handled by listeners
-            }} />
-          ),
+          tabBarButton: (props) => <AddTabButton {...props} />,
         }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {

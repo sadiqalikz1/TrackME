@@ -235,16 +235,12 @@ const WorkDetailScreen: React.FC = () => {
     const otherTotal = detailedExpenses
       .filter((e) => e.type === 'other')
       .reduce((sum, e) => sum + e.amount, 0);
-    const totalExpenses =
-      (work.materialCost || materialTotal) +
-      (work.transportationCost || transportTotal) +
-      (work.otherExpenses || otherTotal) +
-      work.expenses;
+    const totalExpenses = materialTotal + transportTotal + otherTotal;
 
     try {
       const profit = calculateProfit(
         work.quotationAmount,
-        work.workingCost + (work.materialCost || 0) + (work.transportationCost || 0) + (work.otherExpenses || 0),
+        work.workingCost + totalExpenses,
         totalExpenses
       );
 
@@ -286,13 +282,12 @@ const WorkDetailScreen: React.FC = () => {
     const otherTotal = detailedExpenses
       .filter((e) => e.type === 'other')
       .reduce((sum, e) => sum + e.amount, 0);
-    const totalExpenses =
-      materialTotal + transportTotal + otherTotal + (work.expenses || 0);
+    const totalExpenses = materialTotal + transportTotal + otherTotal;
 
     try {
       const profit = calculateProfit(
         work.quotationAmount,
-        work.workingCost + materialTotal + transportTotal + otherTotal,
+        work.workingCost + totalExpenses,
         totalExpenses
       );
 
