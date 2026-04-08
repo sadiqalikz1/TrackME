@@ -14,10 +14,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, useAuth, useNotification } from '@/contexts';
-import { Card, Button, ProgressBar, Modal, Input, ProfitTransferModal } from '@/components/ui';
-import { Work, Transaction, TransactionCategory } from '@/types';
+import {
+  Card,
+  Button,
+  ProgressBar,
+  Modal,
+  Input,
+  ProfitTransferModal,
+  TimeEntryModal,
+  DetailedExpenseModal,
+  QuotationModal,
+} from '@/components/ui';
+import { Work, Transaction, TransactionCategory, DetailedExpense, TimeEntry, Quotation } from '@/types';
 import { getWorkById, updateDocument, deleteDocument, createDocument } from '@/services/firebase';
-import { WORK_CATEGORIES, STATUS_COLORS, COLLECTIONS } from '@/utils/constants';
+import { WORK_CATEGORIES, STATUS_COLORS, COLLECTIONS, EXPENSE_TYPES } from '@/utils/constants';
 import { formatCurrency, formatDate, formatPercentage, calculateProfit } from '@/utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -35,6 +45,9 @@ const WorkDetailScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [transferModalVisible, setTransferModalVisible] = useState(false);
+  const [timeModalVisible, setTimeModalVisible] = useState(false);
+  const [expenseModalVisible, setExpenseModalVisible] = useState(false);
+  const [quotationModalVisible, setQuotationModalVisible] = useState(false);
 
   const currency = user?.currency || 'USD';
 
@@ -165,6 +178,164 @@ const WorkDetailScreen: React.FC = () => {
     }
   };
 
+  const handleAddTimeEntry = async (entry: Omit<TimeEntry, 'id' | 'hoursWorked'>) => {
+    if (!work) return;
+    const newEntry: TimeEntry = {
+      ...entry,
+      id: Date.now().toString(),
+      hoursWorked: entry.duration / 60,
+    };
+    const timeEntries = [...(work.timeEntries || []), newEntry];
+    const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
+
+    try {
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        timeEntries,
+        totalHoursWorked: totalHours,
+      });
+      setWork({ ...work, timeEntries, totalHoursWorked: totalHours });
+      showSuccess('Time entry added');
+    } catch (error) {
+      showError('Failed to add time entry');
+    }
+  };
+
+  const handleRemoveTimeEntry = async (entryId: string) => {
+    if (!work) return;
+    const timeEntries = work.timeEntries?.filter((t) => t.id !== entryId) || [];
+    const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
+
+    try {
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        timeEntries,
+        totalHoursWorked: totalHours,
+      });
+      setWork({ ...work, timeEntries, totalHoursWorked: totalHours });
+      showSuccess('Time entry removed');
+    } catch (error) {
+      showError('Failed to remove time entry');
+    }
+  };
+
+  const handleAddExpense = async (expense: Omit<DetailedExpense, 'id'>) => {
+    if (!work) return;
+    const newExpense: DetailedExpense = {
+      ...expense,
+      id: Date.now().toString(),
+    };
+    const detailedExpenses = [...(work.detailedExpenses || []), newExpense];
+    
+    // Recalculate total expenses
+    const materialTotal = detailedExpenses
+      .filter((e) => e.type === 'materials')
+      .reduce((sum, e) => sum + e.amount, 0);
+    const transportTotal = detailedExpenses
+      .filter((e) => e.type === 'transportation')
+      .reduce((sum, e) => sum + e.amount, 0);
+    const otherTotal = detailedExpenses
+      .filter((e) => e.type === 'other')
+      .reduce((sum, e) => sum + e.amount, 0);
+    const totalExpenses =
+      (work.materialCost || materialTotal) +
+      (work.transportationCost || transportTotal) +
+      (work.otherExpenses || otherTotal) +
+      work.expenses;
+
+    try {
+      const profit = calculateProfit(
+        work.quotationAmount,
+        work.workingCost + (work.materialCost || 0) + (work.transportationCost || 0) + (work.otherExpenses || 0),
+        totalExpenses
+      );
+
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        detailedExpenses,
+        materialCost: materialTotal,
+        transportationCost: transportTotal,
+        otherExpenses: otherTotal,
+        expenses: totalExpenses,
+        profit,
+      });
+
+      setWork({
+        ...work,
+        detailedExpenses,
+        materialCost: materialTotal,
+        transportationCost: transportTotal,
+        otherExpenses: otherTotal,
+        expenses: totalExpenses,
+        profit,
+      });
+
+      showSuccess('Expense added');
+    } catch (error) {
+      showError('Failed to add expense');
+    }
+  };
+
+  const handleRemoveExpense = async (expenseId: string) => {
+    if (!work) return;
+    const detailedExpenses = work.detailedExpenses?.filter((e) => e.id !== expenseId) || [];
+
+    const materialTotal = detailedExpenses
+      .filter((e) => e.type === 'materials')
+      .reduce((sum, e) => sum + e.amount, 0);
+    const transportTotal = detailedExpenses
+      .filter((e) => e.type === 'transportation')
+      .reduce((sum, e) => sum + e.amount, 0);
+    const otherTotal = detailedExpenses
+      .filter((e) => e.type === 'other')
+      .reduce((sum, e) => sum + e.amount, 0);
+    const totalExpenses =
+      materialTotal + transportTotal + otherTotal + (work.expenses || 0);
+
+    try {
+      const profit = calculateProfit(
+        work.quotationAmount,
+        work.workingCost + materialTotal + transportTotal + otherTotal,
+        totalExpenses
+      );
+
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        detailedExpenses,
+        materialCost: materialTotal,
+        transportationCost: transportTotal,
+        otherExpenses: otherTotal,
+        expenses: totalExpenses,
+        profit,
+      });
+
+      setWork({
+        ...work,
+        detailedExpenses,
+        materialCost: materialTotal,
+        transportationCost: transportTotal,
+        otherExpenses: otherTotal,
+        expenses: totalExpenses,
+        profit,
+      });
+
+      showSuccess('Expense removed');
+    } catch (error) {
+      showError('Failed to remove expense');
+    }
+  };
+
+  const handleCreateQuotation = async (quotation: Omit<Quotation, 'id' | 'uid' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const quoteData: Omit<Quotation, 'id' | 'createdAt' | 'updatedAt'> = {
+        ...quotation,
+        uid: user!.uid,
+        workId: work?.id,
+      };
+
+      await createDocument(COLLECTIONS.QUOTATIONS, quoteData);
+      showSuccess('Quotation created successfully!');
+    } catch (error) {
+      showError('Failed to create quotation');
+    }
+  };
+
   const handleDelete = () => {
     Alert.alert('Delete Project', 'This action cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
@@ -274,6 +445,21 @@ const WorkDetailScreen: React.FC = () => {
             </View>
           </View>
 
+          <View style={styles.financialRow}>
+            <View style={styles.financialItem}>
+              <Text style={[styles.financialLabel, { color: colors.textMuted }]}>Transport</Text>
+              <Text style={[styles.financialValue, { color: colors.danger }]}>
+                -{formatCurrency(work.transportationCost || 0, currency)}
+              </Text>
+            </View>
+            <View style={styles.financialItem}>
+              <Text style={[styles.financialLabel, { color: colors.textMuted }]}>Other Expenses</Text>
+              <Text style={[styles.financialValue, { color: colors.danger }]}>
+                -{formatCurrency(work.otherExpenses || 0, currency)}
+              </Text>
+            </View>
+          </View>
+
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
           <View style={styles.financialRow}>
@@ -315,6 +501,87 @@ const WorkDetailScreen: React.FC = () => {
               </Text>
             </View>
           )}
+        </Card>
+
+        {/* Time Tracking */}
+        <Card style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Time Tracking</Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                {work.totalHoursWorked || 0} hours tracked
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setTimeModalVisible(true)}>
+              <Ionicons name="time" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <Button
+            title="Add/View Time Entries"
+            variant="secondary"
+            onPress={() => setTimeModalVisible(true)}
+            icon={<Ionicons name="add-circle" size={18} color={colors.primary} />}
+          />
+        </Card>
+
+        {/* Detailed Expenses Tracking */}
+        <Card style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Expense Details</Text>
+              <View style={styles.expenseBreakdown}>
+                <View style={styles.expenseItem}>
+                  <Text style={[styles.expenseItemLabel, { color: colors.textSecondary }]}>
+                    Materials:
+                  </Text>
+                  <Text style={[styles.expenseItemValue, { color: colors.text }]}>
+                    {formatCurrency(work.materialCost || 0, currency)}
+                  </Text>
+                </View>
+                <View style={styles.expenseItem}>
+                  <Text style={[styles.expenseItemLabel, { color: colors.textSecondary }]}>
+                    Transport:
+                  </Text>
+                  <Text style={[styles.expenseItemValue, { color: colors.text }]}>
+                    {formatCurrency(work.transportationCost || 0, currency)}
+                  </Text>
+                </View>
+                <View style={styles.expenseItem}>
+                  <Text style={[styles.expenseItemLabel, { color: colors.textSecondary }]}>
+                    Other:
+                  </Text>
+                  <Text style={[styles.expenseItemValue, { color: colors.text }]}>
+                    {formatCurrency(work.otherExpenses || 0, currency)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => setExpenseModalVisible(true)}>
+              <Ionicons name="receipt" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <Button
+            title="Add/View Expenses"
+            variant="secondary"
+            onPress={() => setExpenseModalVisible(true)}
+            icon={<Ionicons name="add-circle" size={18} color={colors.primary} />}
+          />
+        </Card>
+
+        {/* Quotation */}
+        <Card style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Quotation</Text>
+            <TouchableOpacity onPress={() => setQuotationModalVisible(true)}>
+              <Ionicons name="document-text" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <Button
+            title="Create Quotation"
+            variant="secondary"
+            onPress={() => setQuotationModalVisible(true)}
+            icon={<Ionicons name="create" size={18} color={colors.primary} />}
+          />
         </Card>
 
         {/* Description */}
@@ -391,6 +658,29 @@ const WorkDetailScreen: React.FC = () => {
         profit={work.profit}
         onClose={() => setTransferModalVisible(false)}
         onTransfer={handleTransferProfitSubmit}
+      />
+
+      <TimeEntryModal
+        visible={timeModalVisible}
+        timeEntries={work.timeEntries || []}
+        totalHours={work.totalHoursWorked || 0}
+        onClose={() => setTimeModalVisible(false)}
+        onAddTime={handleAddTimeEntry}
+        onRemoveTime={handleRemoveTimeEntry}
+      />
+
+      <DetailedExpenseModal
+        visible={expenseModalVisible}
+        expenses={work.detailedExpenses || []}
+        onClose={() => setExpenseModalVisible(false)}
+        onAddExpense={handleAddExpense}
+        onRemoveExpense={handleRemoveExpense}
+      />
+
+      <QuotationModal
+        visible={quotationModalVisible}
+        onClose={() => setQuotationModalVisible(false)}
+        onCreateQuotation={handleCreateQuotation}
       />
     </View>
   );
@@ -587,6 +877,34 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  expenseBreakdown: {
+    marginTop: 8,
+    gap: 4,
+  },
+  expenseItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  expenseItemLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  expenseItemValue: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

@@ -1,4 +1,4 @@
-import { TransactionCategory, WorkCategory, Currency, WorkStatus, RecurringFrequency, CurrencyInfo, BankType } from '@/types';
+import { TransactionCategory, WorkCategory, Currency, WorkStatus, RecurringFrequency, CurrencyInfo, BankType, ExpenseType } from '@/types';
 
 // Transaction Categories
 export const TRANSACTION_CATEGORIES: Record<TransactionCategory, { icon: string; color: string; label: string }> = {
@@ -48,6 +48,14 @@ export const WORK_CATEGORIES: Record<WorkCategory, { icon: string; color: string
   software: { icon: 'code', color: '#6366f1', label: 'Software' },
   maintenance: { icon: 'build', color: '#f59e0b', label: 'Maintenance' },
   consultation: { icon: 'chatbubbles', color: '#ec4899', label: 'Consultation' },
+  other: { icon: 'ellipsis-horizontal', color: '#6b7280', label: 'Other' },
+};
+
+// Expense Types
+export const EXPENSE_TYPES: Record<ExpenseType, { icon: string; color: string; label: string }> = {
+  materials: { icon: 'cube', color: '#8b5cf6', label: 'Materials' },
+  transportation: { icon: 'car', color: '#3b82f6', label: 'Transportation' },
+  labor: { icon: 'people', color: '#10b981', label: 'Labor' },
   other: { icon: 'ellipsis-horizontal', color: '#6b7280', label: 'Other' },
 };
 
@@ -111,6 +119,7 @@ export const COLLECTIONS = {
   TRANSACTIONS: 'transactions',
   BUDGETS: 'budgets',
   WORKS: 'works',
+  QUOTATIONS: 'quotations',
   GOALS: 'goals',
   RECURRING: 'recurring',
   BILL_REMINDERS: 'billReminders',

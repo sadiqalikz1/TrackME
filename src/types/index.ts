@@ -85,6 +85,52 @@ export type WorkCategory =
 
 export type WorkStatus = 'pending' | 'in-progress' | 'completed' | 'cancelled';
 
+export type ExpenseType = 'materials' | 'transportation' | 'labor' | 'other';
+
+export interface DetailedExpense {
+  id: string;
+  type: ExpenseType;
+  description: string;
+  amount: number;
+  date: string;
+  quantity?: number;
+  unit?: string;
+}
+
+export interface TimeEntry {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  description: string;
+  hoursWorked: number;
+}
+
+export interface Quotation {
+  id: string;
+  uid: string;
+  workId?: string;
+  clientName: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  description?: string;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+  }>;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  validUntil: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Work {
   id: string;
   uid: string;
@@ -93,17 +139,24 @@ export interface Work {
   category: WorkCategory;
   status: WorkStatus;
   quotationAmount: number;
+  quotationId?: string;
   finalAmount: number;
   workingCost: number;
   materialCost: number;
+  transportationCost: number;
+  otherExpenses: number;
   expenses: number;
+  detailedExpenses: DetailedExpense[];
   profit: number;
-  progress: number; // 0-100
+  progress: number;
+  totalHoursWorked: number;
+  timeEntries: TimeEntry[];
+  hourlyRate?: number;
   photos: string[];
   isProfitTransferred: boolean;
   profitTransferredAmount?: number;
   profitTransferredDate?: Date;
-  profitTransferredTo?: string; // bank/account name
+  profitTransferredTo?: string;
   startDate: Date;
   endDate?: Date;
   createdAt: Date;
