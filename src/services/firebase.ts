@@ -2,7 +2,6 @@ import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import {
   initializeAuth,
   getAuth,
-  getReactNativePersistence,
   GoogleAuthProvider,
   signInWithCredential,
   signOut as firebaseSignOut,
@@ -10,7 +9,6 @@ import {
   User as FirebaseUser,
   Auth,
 } from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getFirestore,
   collection,
@@ -53,40 +51,65 @@ export const initializeFirebase = () => {
   if (getApps().length === 0) {
     try {
       app = initializeApp(firebaseConfig);
-      auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage),
-      });
       db = getFirestore(app);
       console.log('Firebase initialized successfully');
     } catch (error) {
       console.error('Firebase initialization error:', error);
       throw error;
     }
-
-    // Persistence is handled by getReactNativePersistence for React Native
   } else {
     app = getApps()[0];
-    auth = getAuth(app);
     db = getFirestore(app);
   }
-
-  return { app, auth, db };
+  return { app, db };
 };
 
 // Lazy initialization - don't call immediately
 let isInitialized = false;
+let initPromise: Promise<void> | null = null;
 
-const ensureInitialized = () => {
+const ensureInitialized = async () => {
+  if (initPromise) {
+    return initPromise;
+  }
+  
   if (!isInitialized) {
-    initializeFirebase();
-    isInitialized = true;
+    initPromise = new Promise((resolve) => {
+      try {
+        initializeFirebase();
+        isInitialized = true;
+        resolve();
+      } catch (error) {
+        console.error('Error initializing Firebase:', error);
+        resolve(); // Resolve anyway to not block startup
+      }
+    });
+    
+    return initPromise;
   }
 };
 
-// Export initialized instances with lazy initialization
+// Lazy auth initialization - only initialize when actually needed
+const getAuthInstanceInternal = (): Auth => {
+  if (!auth) {
+    try {
+      auth = initializeAuth(app!);
+    } catch (error: any) {
+      // Auth might already be initialized, try getAuth to retrieve it
+      try {
+        auth = getAuth(app!);
+      } catch (getAuthError) {
+        console.error('Failed to get auth instance:', error, getAuthError);
+        throw error;
+      }
+    }
+  }
+  return auth;
+};
+
+// Export for use in AuthContext
 export const getAuthInstance = (): Auth => {
-  ensureInitialized();
-  return auth!;
+  return getAuthInstanceInternal();
 };
 
 export const getDbInstance = (): Firestore => {
@@ -95,7 +118,7 @@ export const getDbInstance = (): Firestore => {
 };
 
 // For backward compatibility
-export { auth, db };
+export { auth, db, ensureInitialized };
 
 // Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
@@ -110,8 +133,34 @@ export const signOut = async () => {
   return firebaseSignOut(getAuthInstance());
 };
 
-export const onAuthChange = (callback: (user: FirebaseUser | null) => void) => {
-  return onAuthStateChanged(getAuthInstance(), callback);
+export const onAuthChange = async (callback: (user: FirebaseUser | null) => void) => {
+  // Retry logic for auth initialization
+  let retries = 0;
+  const maxRetries = 10;
+  
+  const trySetupListener = (): Promise<(() => void)> => {
+    return new Promise((resolve, reject) => {
+      try {
+        const authInstance = getAuthInstance();
+        const unsubscribe = onAuthStateChanged(authInstance, callback);
+        resolve(unsubscribe);
+      } catch (error) {
+        if (retries < maxRetries) {
+          retries++;
+          // Exponential backoff: 100ms, 200ms, 400ms, etc.
+          setTimeout(() => {
+            trySetupListener()
+              .then(resolve)
+              .catch(reject);
+          }, 100 * Math.pow(2, retries - 1));
+        } else {
+          reject(error);
+        }
+      }
+    });
+  };
+  
+  return trySetupListener();
 };
 
 // Firestore helpers
@@ -250,7 +299,7 @@ export const getUserWorks = (uid: string) => {
 // Goal queries
 export const getUserGoals = (uid: string) => {
   return query(
-    collection(db, COLLECTIONS.goals),
+    collection(getDbInstance(), COLLECTIONS.goals),
     where('uid', '==', uid),
     orderBy('deadline', 'asc')
   );
@@ -259,7 +308,7 @@ export const getUserGoals = (uid: string) => {
 // Bill Reminder queries
 export const getUserBillReminders = (uid: string) => {
   return query(
-    collection(db, COLLECTIONS.billReminders),
+    collection(getDbInstance(), COLLECTIONS.billReminders),
     where('uid', '==', uid),
     orderBy('dueDate', 'asc')
   );
@@ -268,7 +317,7 @@ export const getUserBillReminders = (uid: string) => {
 // Recurring transaction queries
 export const getActiveRecurringTransactions = (uid: string) => {
   return query(
-    collection(db, COLLECTIONS.recurring),
+    collection(getDbInstance(), COLLECTIONS.recurring),
     where('uid', '==', uid),
     where('active', '==', true)
   );

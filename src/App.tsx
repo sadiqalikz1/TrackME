@@ -8,16 +8,9 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import RootNavigator from '@/navigation/RootNavigator';
-import { initializeFirebase } from '@/services/firebase';
+import { ensureInitialized } from '@/services/firebase';
 // @ts-ignore
 import '../global.css';
-
-// Initialize Firebase with error handling
-try {
-  initializeFirebase();
-} catch (error) {
-  console.error('Failed to initialize Firebase:', error);
-}
 
 // Keep splash screen visible until we're ready
 SplashScreen.preventAutoHideAsync();
@@ -34,6 +27,13 @@ const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
   const [isBiometricVerified, setIsBiometricVerified] = useState(false);
   const [isBiometricCheck, setIsBiometricCheck] = useState(true);
+
+  // Initialize Firebase after component mounts
+  useEffect(() => {
+    ensureInitialized().catch((error) => {
+      console.error('Firebase initialization error:', error);
+    });
+  }, []);
 
   useEffect(() => {
     const checkBiometric = async () => {

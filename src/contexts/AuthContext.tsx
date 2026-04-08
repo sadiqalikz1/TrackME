@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { User as FirebaseUser } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  auth,
   onAuthChange,
   signOut as firebaseSignOut,
   getUserDocument,
@@ -34,51 +33,81 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthChange(async (fbUser) => {
-      setFirebaseUser(fbUser);
+    let unsubscribe: (() => void) | undefined;
+    let retryCount = 0;
+    const maxRetries = 5;
+    
+    const setupAuthListener = async () => {
+      try {
+        // Small delay to ensure React Native is ready
+        await new Promise(resolve => setTimeout(resolve, 200 * (retryCount + 1)));
+        
+        unsubscribe = await onAuthChange(async (fbUser) => {
+          setFirebaseUser(fbUser);
 
-      if (fbUser) {
-        try {
-          // Try to get existing user document
-          let userData = await getUserDocument(fbUser.uid) as User | null;
+          if (fbUser) {
+            try {
+              // Try to get existing user document
+              let userData = await getUserDocument(fbUser.uid) as User | null;
 
-          if (!userData) {
-            // Create new user document
-            const newUser: Omit<User, 'createdAt' | 'updatedAt'> = {
-              uid: fbUser.uid,
-              email: fbUser.email || '',
-              displayName: fbUser.displayName || 'User',
-              photoURL: fbUser.photoURL || undefined,
-              ...DEFAULT_USER_SETTINGS,
-            };
+              if (!userData) {
+                // Create new user document
+                const newUser: Omit<User, 'createdAt' | 'updatedAt'> = {
+                  uid: fbUser.uid,
+                  email: fbUser.email || '',
+                  displayName: fbUser.displayName || 'User',
+                  photoURL: fbUser.photoURL || undefined,
+                  ...DEFAULT_USER_SETTINGS,
+                };
 
-            await createUserDocument(fbUser.uid, newUser);
-            userData = {
-              ...newUser,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            } as User;
+                await createUserDocument(fbUser.uid, newUser);
+                userData = {
+                  ...newUser,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                } as User;
+              }
+
+              setUser(userData);
+              await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userData));
+            } catch (error) {
+              console.error('Error loading user data:', error);
+              // Try to load from local storage as fallback
+              const cachedUser = await AsyncStorage.getItem(STORAGE_KEYS.user);
+              if (cachedUser) {
+                setUser(JSON.parse(cachedUser));
+              }
+            }
+          } else {
+            setUser(null);
+            await AsyncStorage.removeItem(STORAGE_KEYS.user);
           }
 
-          setUser(userData);
-          await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userData));
-        } catch (error) {
-          console.error('Error loading user data:', error);
-          // Try to load from local storage as fallback
-          const cachedUser = await AsyncStorage.getItem(STORAGE_KEYS.user);
-          if (cachedUser) {
-            setUser(JSON.parse(cachedUser));
-          }
+          setIsLoading(false);
+        });
+        
+        console.log('Auth listener setup successfully');
+      } catch (error) {
+        console.error(`Error setting up auth listener (attempt ${retryCount + 1}):`, error);
+        
+        // Retry up to maxRetries times
+        if (retryCount < maxRetries) {
+          retryCount++;
+          setTimeout(setupAuthListener, 500);
+        } else {
+          console.error('Max retries reached for auth listener setup');
+          setIsLoading(false);
         }
-      } else {
-        setUser(null);
-        await AsyncStorage.removeItem(STORAGE_KEYS.user);
       }
+    };
 
-      setIsLoading(false);
-    });
+    setupAuthListener();
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   const signOut = async () => {
@@ -145,5 +174,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-export default AuthContext;
