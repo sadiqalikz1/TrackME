@@ -163,7 +163,7 @@ const DashboardScreen: React.FC = () => {
           </View>
           <TouchableOpacity
             style={[styles.settingsButton, { backgroundColor: colors.card }]}
-            onPress={() => (navigation as any).navigate('Settings', { screen: 'DashboardCustomization' })}
+            onPress={() => (navigation as any).navigate('More', { screen: 'DashboardCustomization' })}
           >
             <Ionicons name="settings" size={24} color={colors.primary} />
           </TouchableOpacity>

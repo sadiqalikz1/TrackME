@@ -347,12 +347,10 @@ const SettingsScreen: React.FC = () => {
         onClose={() => setCurrencyModalVisible(false)}
         title="Select Currency"
       >
-        <FlatList
-          data={CURRENCIES}
-          keyExtractor={(item) => item.code}
-          style={{ maxHeight: 400 }}
-          renderItem={({ item }) => (
+        <View>
+          {CURRENCIES.map((item) => (
             <TouchableOpacity
+              key={item.code}
               style={[
                 styles.currencyItem,
                 {
@@ -372,8 +370,8 @@ const SettingsScreen: React.FC = () => {
                 <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
               )}
             </TouchableOpacity>
-          )}
-        />
+          ))}
+        </View>
       </Modal>
     </View>
   );
