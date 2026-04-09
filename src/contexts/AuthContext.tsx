@@ -8,6 +8,8 @@ import {
   getUserDocument,
   createUserDocument,
   updateUserDocument,
+  signInWithEmail,
+  signUpWithEmail,
 } from '@/services/firebase';
 import { syncEngine } from '@/services/syncEngine';
 import { setHybridRepositoryUid } from '@/services/repositories/hybridRepository';
@@ -19,10 +21,13 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isGuest: boolean;
   isOfflineMode: boolean;
   signOut: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
   refreshUser: () => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<void>;
+  signupWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -44,9 +49,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 5;
   const CACHE_VALIDITY_DAYS = 7;
+
+  // ========== GUEST MODE ==========
+  
+  /**
+   * Create a guest user for offline-only mode
+   * Guest users have uid starting with 'guest_' and local-only data
+   */
+  const createGuestUser = async (): Promise<User> => {
+    const guestUid = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const guestUser: User = {
+      uid: guestUid,
+      email: `guest_${Date.now()}@local`,
+      displayName: 'Guest User',
+      photoURL: null,
+      currency: 'USD',
+      theme: 'dark',
+      budgetAlertThreshold: 80,
+      biometricEnabled: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await cacheUser(guestUser);
+    console.log(`Created guest user: ${guestUid}`);
+    return guestUser;
+  };
 
   const loadCachedUser = async () => {
     try {
@@ -117,6 +148,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // ========== AUTHENTICATION FUNCTIONS ==========
+
+  const loginWithEmail = async (email: string, password: string): Promise<void> => {
+    try {
+      console.log(`Attempting login with email: ${email}`);
+      await signInWithEmail(email, password);
+      // onAuthChange listener will handle the rest
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    }
+  };
+
+  const signupWithEmail = async (email: string, password: string, displayName: string = 'User'): Promise<void> => {
+    try {
+      console.log(`Attempting signup with email: ${email}`);
+      await signUpWithEmail(email, password);
+      // onAuthChange listener will create user document and handle the rest
+    } catch (error) {
+      console.error('Signup failed:', error);
+      throw error;
+    }
+  };
+
   useEffect(() => {
     initializeFirebase();
     let unsubscribe: (() => void) | null = null;
@@ -146,11 +201,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setHybridRepositoryUid(fbUser.uid); // Enable uid filtering in repositories
             syncEngine.enableSync(); // Enable background sync now that user is authenticated
             setIsOfflineMode(false); // Exit offline mode
+            setIsGuest(false); // User is authenticated, not a guest
             setRetryCount(0);
 
-            // Trigger full sync for all collections after successful login
+            // ========== FETCH FIREBASE DATA AFTER LOGIN ==========
+            // Pull all user collections from Firebase into local SQLite
             try {
+              console.log('Fetching user data from Firebase...');
               await syncEngine.manualSync();
+              console.log('User data synced successfully from Firebase');
             } catch (error) {
               console.warn('Initial sync after login failed, will retry in background:', error);
             }
@@ -160,31 +219,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (cachedUser && !isCachedUserStale(cachedUser)) {
               setIsOfflineMode(true); // Enter offline mode
               setUser(cachedUser);
+              setIsGuest(cachedUser.uid.startsWith('guest_'));
               console.log('Switched to offline mode with cached user');
             } else {
               // Cached user is stale/missing, must re-login
               setUser(null);
               setIsOfflineMode(false);
+              setIsGuest(false);
             }
           }
         } else {
           // Firebase logged out
-          setUser(null);
-          setIsOfflineMode(false);
-          await cacheUser(null);
+          console.log('Firebase user logged out');
+          setFirebaseUser(null);
+          syncEngine.disableSync();
+          
+          // Create new guest user for continued offline use
+          const guestUser = await createGuestUser();
+          setUser(guestUser);
+          setIsGuest(true);
+          setIsOfflineMode(true);
         }
         
         setIsLoading(false);
       });
       
-      // Step 3: If we have a cached user, show it immediately (don't wait for Firebase)
+      // Step 3: If we have a cached user, show app immediately (don't wait for Firebase)
       if (cachedUser && !isCachedUserStale(cachedUser)) {
         setIsOfflineMode(true);
+        setIsGuest(cachedUser.uid.startsWith('guest_'));
         setIsLoading(false);
-        console.log('Loaded app with cached user (offline mode)');
-      } else if (!cachedUser) {
-        // No cached user, wait for Firebase
-        setIsLoading(true);
+        console.log(`Loaded cached user: ${cachedUser.displayName}`);
+      } else {
+        // No cached user, create guest user and start app immediately
+        const guestUser = await createGuestUser();
+        setUser(guestUser);
+        setIsGuest(true);
+        setIsOfflineMode(true);
+        setIsLoading(false);
+        console.log('Started in guest mode');
       }
     };
 
@@ -198,11 +271,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signOut = async () => {
     try {
+      console.log('Signing out user...');
       await firebaseSignOut();
       setUser(null);
       setFirebaseUser(null);
-      await cacheUser(null);
-      syncEngine.disableSync(); // Disable sync after logout
+      syncEngine.disableSync();
+      
+      // Create new guest user for continued offline use
+      const guestUser = await createGuestUser();
+      setUser(guestUser);
+      setIsGuest(true);
+      setIsOfflineMode(true);
+      console.log('Logged out, switched to guest mode');
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
@@ -241,11 +321,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     firebaseUser,
     isLoading,
-    isAuthenticated: !!user, // If user exists (cached or verified), they're authenticated
+    isAuthenticated: !!user && !isGuest, // Only true if logged in (not a guest)
+    isGuest,
     isOfflineMode,
     signOut,
     updateUser,
     refreshUser,
+    loginWithEmail,
+    signupWithEmail,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

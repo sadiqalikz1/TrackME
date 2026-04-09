@@ -277,7 +277,7 @@ const MainTabNavigator = () => {
 // Root Navigator
 export const RootNavigator: React.FC = () => {
   const { colors } = useTheme();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -295,9 +295,11 @@ export const RootNavigator: React.FC = () => {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
-        {isAuthenticated ? (
+        {user ? (
+          // Show dashboard for both guest and authenticated users
           <Stack.Screen name="Main" component={MainTabNavigator} />
         ) : (
+          // Only show login if no user at all
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
       </Stack.Navigator>

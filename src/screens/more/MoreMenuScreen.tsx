@@ -1,10 +1,10 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth } from '@/contexts';
-import { Card } from '@/components/ui';
+import { Card, Button, Input } from '@/components/ui';
 
 interface MenuItem {
   id: string;
@@ -68,12 +68,68 @@ const menuItems: MenuItem[] = [
 
 const MoreMenuScreen: React.FC = () => {
   const { colors } = useTheme();
-  const { user } = useAuth();
+  const { user, isGuest, loginWithEmail, signupWithEmail, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
 
+  // Auth modal states
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showSignupModal, setShowSignupModal] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [signupDisplayName, setSignupDisplayName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
   const handleNavigate = (screen: string) => {
     navigation.navigate(screen as never);
+  };
+
+  const handleLogin = async () => {
+    try {
+      setError('');
+      setIsLoading(true);
+      await loginWithEmail(loginEmail, loginPassword);
+      setShowLoginModal(false);
+      setLoginEmail('');
+      setLoginPassword('');
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please check your credentials.');
+      console.error('Login error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignup = async () => {
+    try {
+      setError('');
+      if (signupPassword.length < 6) {
+        setError('Password must be at least 6 characters');
+        return;
+      }
+      setIsLoading(true);
+      await signupWithEmail(signupEmail, signupPassword, signupDisplayName);
+      setShowSignupModal(false);
+      setSignupEmail('');
+      setSignupPassword('');
+      setSignupDisplayName('');
+    } catch (err: any) {
+      setError(err.message || 'Signup failed. Please try again.');
+      console.error('Signup error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
   };
 
   return (
@@ -87,23 +143,55 @@ const MoreMenuScreen: React.FC = () => {
           <Text style={[styles.title, { color: colors.text }]}>More</Text>
         </View>
 
-        {/* User Card */}
-        <Card style={styles.userCard}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <Text style={styles.avatarText}>
-              {user?.displayName?.charAt(0).toUpperCase() || 'U'}
+        {/* User Card or Guest Banner */}
+        {isGuest ? (
+          <Card style={[styles.guestCard, { backgroundColor: colors.card }]}>
+            <Ionicons name="phone-portrait" size={32} color={colors.primary} />
+            <Text style={[styles.guestTitle, { color: colors.text }]}>Guest Mode</Text>
+            <Text style={[styles.guestDescription, { color: colors.textMuted }]}>
+              You're using the app offline. Data is saved locally only.
             </Text>
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={[styles.userName, { color: colors.text }]}>
-              {user?.displayName || 'User'}
-            </Text>
-            <Text style={[styles.userEmail, { color: colors.textMuted }]}>
-              {user?.email}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </Card>
+            <Button
+              label="Sign In with Email"
+              onPress={() => {
+                setError('');
+                setShowLoginModal(true);
+              }}
+              style={styles.authButton}
+            />
+            <Button
+              label="Create Account"
+              onPress={() => {
+                setError('');
+                setShowSignupModal(true);
+              }}
+              variant="outline"
+              style={styles.authButton}
+            />
+          </Card>
+        ) : (
+          <Card style={styles.userCard}>
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+              <Text style={styles.avatarText}>
+                {user?.displayName?.charAt(0).toUpperCase() || 'U'}
+              </Text>
+            </View>
+            <View style={styles.userInfo}>
+              <Text style={[styles.userName, { color: colors.text }]}>
+                {user?.displayName || 'User'}
+              </Text>
+              <Text style={[styles.userEmail, { color: colors.textMuted }]}>
+                {user?.email}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={[styles.logoutButton, { backgroundColor: '#fee2e2' }]}
+            >
+              <Ionicons name="log-out" size={20} color="#dc2626" />
+            </TouchableOpacity>
+          </Card>
+        )}
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>
@@ -133,6 +221,148 @@ const MoreMenuScreen: React.FC = () => {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* LOGIN MODAL */}
+      <Modal
+        visible={showLoginModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowLoginModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Sign In</Text>
+              <TouchableOpacity onPress={() => setShowLoginModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {error ? (
+              <View style={[styles.errorBox, { backgroundColor: '#fee2e2' }]}>
+                <Text style={{ color: '#dc2626' }}>{error}</Text>
+              </View>
+            ) : null}
+
+            <Input
+              placeholder="Email"
+              value={loginEmail}
+              onChangeText={setLoginEmail}
+              keyboardType="email-address"
+              editable={!isLoading}
+              style={styles.input}
+            />
+
+            <Input
+              placeholder="Password"
+              value={loginPassword}
+              onChangeText={setLoginPassword}
+              secureTextEntry
+              editable={!isLoading}
+              style={styles.input}
+            />
+
+            <Button
+              label={isLoading ? 'Signing In...' : 'Sign In'}
+              onPress={handleLogin}
+              disabled={isLoading || !loginEmail || !loginPassword}
+              style={styles.submitButton}
+            />
+
+            <Button
+              label="Cancel"
+              onPress={() => setShowLoginModal(false)}
+              variant="outline"
+              disabled={isLoading}
+              style={styles.submitButton}
+            />
+
+            <TouchableOpacity onPress={() => { setShowLoginModal(false); setShowSignupModal(true); }}>
+              <Text style={[{ color: colors.primary }, styles.switchText]}>
+                Don't have an account? Sign up
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* SIGNUP MODAL */}
+      <Modal
+        visible={showSignupModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSignupModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Create Account</Text>
+              <TouchableOpacity onPress={() => setShowSignupModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {error ? (
+              <View style={[styles.errorBox, { backgroundColor: '#fee2e2' }]}>
+                <Text style={{ color: '#dc2626' }}>{error}</Text>
+              </View>
+            ) : null}
+
+            <Input
+              placeholder="Display Name"
+              value={signupDisplayName}
+              onChangeText={setSignupDisplayName}
+              editable={!isLoading}
+              style={styles.input}
+            />
+
+            <Input
+              placeholder="Email"
+              value={signupEmail}
+              onChangeText={setSignupEmail}
+              keyboardType="email-address"
+              editable={!isLoading}
+              style={styles.input}
+            />
+
+            <Input
+              placeholder="Password (min 6 characters)"
+              value={signupPassword}
+              onChangeText={setSignupPassword}
+              secureTextEntry
+              editable={!isLoading}
+              style={styles.input}
+            />
+
+            <Button
+              label={isLoading ? 'Creating...' : 'Create Account'}
+              onPress={handleSignup}
+              disabled={
+                isLoading ||
+                !signupEmail ||
+                !signupPassword ||
+                !signupDisplayName ||
+                signupPassword.length < 6
+              }
+              style={styles.submitButton}
+            />
+
+            <Button
+              label="Cancel"
+              onPress={() => setShowSignupModal(false)}
+              variant="outline"
+              disabled={isLoading}
+              style={styles.submitButton}
+            />
+
+            <TouchableOpacity onPress={() => { setShowSignupModal(false); setShowLoginModal(true); }}>
+              <Text style={[{ color: colors.primary }, styles.switchText]}>
+                Already have an account? Sign in
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -211,6 +441,71 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 100,
+  },
+  guestCard: {
+    padding: 24,
+    marginBottom: 24,
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  guestTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  guestDescription: {
+    fontSize: 14,
+    marginTop: 8,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  authButton: {
+    marginBottom: 8,
+    width: '100%',
+  },
+  logoutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 32,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  input: {
+    marginBottom: 12,
+  },
+  submitButton: {
+    marginBottom: 8,
+  },
+  switchText: {
+    textAlign: 'center',
+    fontSize: 14,
+    marginTop: 16,
+    fontWeight: '600',
+  },
+  errorBox: {
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
   },
 });
 
