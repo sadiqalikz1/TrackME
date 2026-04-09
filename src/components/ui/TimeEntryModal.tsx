@@ -7,7 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { TimeEntry } from '@/types';
 import { formatDate } from '@/utils/formatters';
-import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
+import { setUserActionInProgress, pauseCollectionSync, resumeCollectionSync } from '@/services/repositories/hybridRepository';
 
 interface TimeEntryModalProps {
   visible: boolean;
@@ -36,10 +36,10 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
   // Pause background sync while user is filling the form
   useEffect(() => {
     if (visible) {
-      setUserActionInProgress(true);
+      pauseCollectionSync('work');
     }
     return () => {
-      setUserActionInProgress(false);
+      resumeCollectionSync('work');
     };
   }, [visible]);
 

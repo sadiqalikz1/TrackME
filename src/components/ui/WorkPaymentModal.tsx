@@ -10,7 +10,7 @@ import { DateTimePicker } from './DateTimePicker';
 import { WorkPayment, PaymentType } from '@/types';
 import { CURRENCIES } from '@/utils/constants';
 import { formatDate } from '@/utils/formatters';
-import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
+import { setUserActionInProgress, pauseCollectionSync, resumeCollectionSync } from '@/services/repositories/hybridRepository';
 
 interface WorkPaymentModalProps {
   visible: boolean;
@@ -50,10 +50,10 @@ export const WorkPaymentModal: React.FC<WorkPaymentModalProps> = ({
   // Pause background sync while user is filling the form
   useEffect(() => {
     if (visible) {
-      setUserActionInProgress(true);
+      pauseCollectionSync('work');
     }
     return () => {
-      setUserActionInProgress(false);
+      resumeCollectionSync('work');
     };
   }, [visible]);
 

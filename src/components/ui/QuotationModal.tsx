@@ -17,7 +17,7 @@ import { Card } from './Card';
 import { Quotation } from '@/types';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { CURRENCIES } from '@/utils/constants';
-import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
+import { setUserActionInProgress, pauseCollectionSync, resumeCollectionSync } from '@/services/repositories/hybridRepository';
 
 interface QuotationModalProps {
   visible: boolean;
@@ -62,10 +62,10 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
   // Pause background sync while user is filling the form
   useEffect(() => {
     if (visible) {
-      setUserActionInProgress(true);
+      pauseCollectionSync('quotations');
     }
     return () => {
-      setUserActionInProgress(false);
+      resumeCollectionSync('quotations');
     };
   }, [visible]);
 

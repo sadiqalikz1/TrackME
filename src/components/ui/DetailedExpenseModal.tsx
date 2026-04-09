@@ -8,7 +8,7 @@ import { Card } from './Card';
 import { DetailedExpense, ExpenseType } from '@/types';
 import { EXPENSE_TYPES, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
+import { setUserActionInProgress, pauseCollectionSync, resumeCollectionSync } from '@/services/repositories/hybridRepository';
 
 const UNIT_OPTIONS = ['pcs', 'ft', 'm', 'kg', 'g', 'L', 'ml', 'hr', 'box', 'set'];
 
@@ -46,10 +46,10 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
   // Pause background sync while user is filling the form
   useEffect(() => {
     if (visible) {
-      setUserActionInProgress(true);
+      pauseCollectionSync('transactions');
     }
     return () => {
-      setUserActionInProgress(false);
+      resumeCollectionSync('transactions');
     };
   }, [visible]);
 

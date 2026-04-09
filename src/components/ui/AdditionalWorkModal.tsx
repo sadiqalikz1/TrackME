@@ -10,7 +10,7 @@ import { DateTimePicker } from './DateTimePicker';
 import { AdditionalWork } from '@/types';
 import { CURRENCIES } from '@/utils/constants';
 import { formatDate } from '@/utils/formatters';
-import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
+import { setUserActionInProgress, pauseCollectionSync, resumeCollectionSync } from '@/services/repositories/hybridRepository';
 
 interface AdditionalWorkModalProps {
   visible: boolean;
@@ -43,10 +43,10 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
   // Pause background sync while user is filling the form
   useEffect(() => {
     if (visible) {
-      setUserActionInProgress(true);
+      pauseCollectionSync('work');
     }
     return () => {
-      setUserActionInProgress(false);
+      resumeCollectionSync('work');
     };
   }, [visible]);
 

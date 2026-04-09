@@ -16,6 +16,7 @@ export class HybridRepository implements IRepository {
   private isGuestUser: boolean = false;
   private isUserActionInProgress: boolean = false; // Flag to prevent sync during user actions
   private lastSyncTimes: Map<string, number> = new Map(); // Track last sync time per collection
+  private pausedCollections: Set<string> = new Set(); // Track collections with paused syncing
   private readonly SYNC_DEBOUNCE_MS = 30000; // 30 seconds minimum between syncs per collection
 
   constructor() {
@@ -49,6 +50,30 @@ export class HybridRepository implements IRepository {
    */
   isUserActionActive(): boolean {
     return this.isUserActionInProgress;
+  }
+
+  /**
+   * Pause sync for a specific collection
+   * Used when user is editing that collection to avoid UI flickering
+   */
+  pauseCollectionSync(collection: string): void {
+    this.pausedCollections.add(collection);
+    console.log(`HybridRepository: Paused sync for collection "${collection}"`);
+  }
+
+  /**
+   * Resume sync for a specific collection
+   */
+  resumeCollectionSync(collection: string): void {
+    this.pausedCollections.delete(collection);
+    console.log(`HybridRepository: Resumed sync for collection "${collection}"`);
+  }
+
+  /**
+   * Check if a collection is paused
+   */
+  private isCollectionPaused(collection: string): boolean {
+    return this.pausedCollections.has(collection);
   }
 
   private initNetworkListener(): void {
@@ -355,6 +380,11 @@ export class HybridRepository implements IRepository {
         return;
       }
 
+      // Skip if this specific collection is paused (e.g., user editing quotations)
+      if (this.isCollectionPaused(collection)) {
+        return;
+      }
+
       // Skip remote sync for guest users (local-only mode) - silent
       if (this.isGuestUser) {
         return;
@@ -557,4 +587,21 @@ export async function syncWithStrategy(strategy: SyncStrategy): Promise<void> {
  */
 export function setUserActionInProgress(inProgress: boolean): void {
   hybridRepository.setUserActionInProgress(inProgress);
+}
+
+/**
+ * Pause background sync for a specific collection
+ * Use this when user is editing documents in that collection
+ * Example: When QuotationModal opens, pause 'quotations' collection
+ */
+export function pauseCollectionSync(collection: string): void {
+  hybridRepository.pauseCollectionSync(collection);
+}
+
+/**
+ * Resume background sync for a specific collection
+ * Call this when user closes the edit modal
+ */
+export function resumeCollectionSync(collection: string): void {
+  hybridRepository.resumeCollectionSync(collection);
 }
