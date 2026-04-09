@@ -43,11 +43,17 @@ const GoalsScreen: React.FC = () => {
   const [selectedColor, setSelectedColor] = useState(GOAL_COLORS[0]);
   const [addAmount, setAddAmount] = useState('');
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const currency = user?.currency || 'USD';
 
   const onRefresh = async () => {
-    await refetch();
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const openAddModal = () => {

@@ -168,7 +168,7 @@ const MainTabNavigator = () => {
     {
       id: 'goal',
       label: 'Goal',
-      icon: 'target',
+      icon: 'star',
       color: '#f59e0b',
       onPress: () => {
         setAddModalVisible(false);

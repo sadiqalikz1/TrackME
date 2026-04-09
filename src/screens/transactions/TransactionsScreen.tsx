@@ -61,6 +61,7 @@ const TransactionsScreen: React.FC = () => {
   }, [route.params]);
 
   const filteredTransactions = useMemo(() => {
+    if (!transactions) return [];
     return transactions.filter((t) => {
       const matchesType = filterType === 'all' || t.type === filterType;
       const matchesSearch =
