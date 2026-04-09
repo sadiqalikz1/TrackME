@@ -31,6 +31,7 @@ import QuotationDetailScreen from '@/screens/quotations/QuotationDetailScreen';
 import AnalysisScreen from '@/screens/analysis/AnalysisScreen';
 import SettingsScreen from '@/screens/settings/SettingsScreen';
 import BillRemindersScreen from '@/screens/settings/BillRemindersScreen';
+import DashboardCustomizationScreen from '@/screens/settings/DashboardCustomizationScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
@@ -75,6 +76,7 @@ const MoreStackNavigator = () => {
       <MoreStack.Screen name="Analysis" component={AnalysisScreen} />
       <MoreStack.Screen name="Settings" component={SettingsScreen} />
       <MoreStack.Screen name="BillReminders" component={BillRemindersScreen} />
+      <MoreStack.Screen name="DashboardCustomization" component={DashboardCustomizationScreen} />
     </MoreStack.Navigator>
   );
 };

@@ -15,3 +15,4 @@ export { AdditionalWorkModal } from './AdditionalWorkModal';
 export { AddOptionsModal } from './AddOptionsModal';
 export { DateTimePicker } from './DateTimePicker';
 export { default as BankAccountSelector } from './BankAccountSelector';
+export { default as CardContextMenu } from './CardContextMenu';

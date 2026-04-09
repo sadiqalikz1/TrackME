@@ -7,53 +7,215 @@ import {
   RefreshControl,
   TouchableOpacity,
   Dimensions,
+  Alert,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { PieChart } from 'react-native-chart-kit';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme, useAuth } from '@/contexts';
-import { Card, SkeletonList } from '@/components/ui';
-import { TransactionItem, GoalCard } from '@/components/common';
-import { Transaction, Goal, CategoryData } from '@/types';
+import { useTheme, useAuth, useDashboard } from '@/contexts';
+import { Card, SkeletonList, CardContextMenu } from '@/components/ui';
+import {
+  TransactionItem,
+  GoalCard,
+  IncomeExpenseCard,
+  BudgetStatusCard,
+  WorkOverviewCard,
+  NetWorthCard,
+  SpendingTrendsCard,
+  TopCategoriesCard,
+  UpcomingBillsCard,
+  EnhancedGoalProgressCard,
+} from '@/components/common';
+import { Transaction, Goal, Budget, Work, BillReminder, DashboardCardId } from '@/types';
 import { useData } from '@/hooks';
-import { TRANSACTION_CATEGORIES } from '@/utils/constants';
-import { formatCurrency, getMonthRange, formatDate } from '@/utils/formatters';
+import { formatCurrency, formatDate } from '@/utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const DashboardScreen: React.FC = () => {
   const { colors } = useTheme();
   const { user } = useAuth();
+  const { config, toggleCardVisibility, reorderCards, updateCardColor, getEnabledCards } = useDashboard();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
 
-  // Use hooks for data fetching through service layer (not direct Firebase)
+  // Fetch all data
   const { data: transactionsData, loading: transLoading, refetch: refetchTransactions } = useData('transactions');
   const { data: goalsData, loading: goalsLoading, refetch: refetchGoals } = useData('goals');
+  const { data: budgetsData, loading: budgetsLoading, refetch: refetchBudgets } = useData('budgets');
+  const { data: worksData, loading: worksLoading, refetch: refetchWorks } = useData('work');
+  const { data: billsData, loading: billsLoading, refetch: refetchBills } = useData('billReminders');
 
   const [refreshing, setRefreshing] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean; cardId: DashboardCardId | null }>({
+    visible: false,
+    cardId: null,
+  });
 
   // Ensure data is arrays
-  const transactions = useMemo(() => {
-    return (Array.isArray(transactionsData) ? transactionsData : []) as Transaction[];
-  }, [transactionsData]);
+  const transactions = useMemo(
+    () => (Array.isArray(transactionsData) ? transactionsData : []) as Transaction[],
+    [transactionsData]
+  );
+  const goals = useMemo(() => (Array.isArray(goalsData) ? goalsData : []) as Goal[], [goalsData]);
+  const budgets = useMemo(() => (Array.isArray(budgetsData) ? budgetsData : []) as Budget[], [budgetsData]);
+  const works = useMemo(() => (Array.isArray(worksData) ? worksData : []) as Work[], [worksData]);
+  const bills = useMemo(
+    () => (Array.isArray(billsData) ? billsData : []) as BillReminder[],
+    [billsData]
+  );
 
-  const goals = useMemo(() => {
-    return (Array.isArray(goalsData) ? goalsData : []) as Goal[];
-  }, [goalsData]);
-
-  const loading = transLoading || goalsLoading;
+  const loading = transLoading || goalsLoading || budgetsLoading || worksLoading || billsLoading;
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refetchTransactions(), refetchGoals()]);
+    await Promise.all([refetchTransactions(), refetchGoals(), refetchBudgets(), refetchWorks(), refetchBills()]);
     setRefreshing(false);
   };
 
-  // Calculate monthly stats
+  const currency = user?.currency || 'USD';
+  const enabledCards = getEnabledCards();
+
+  const renderCard = (cardId: DashboardCardId, card: any) => {
+    const customColor = config.cards.find((c) => c.id === cardId)?.customColor;
+    
+    return (
+      <Pressable
+        key={cardId}
+        onLongPress={() => setContextMenu({ visible: true, cardId })}
+        delayLongPress={500}
+      >
+        {cardId === 'balance' && (
+          <BalanceCard transactions={transactions} currency={currency} customColor={customColor} />
+        )}
+        {cardId === 'incomeExpense' && (
+          <IncomeExpenseCard transactions={transactions} currency={currency} customColor={customColor} />
+        )}
+        {cardId === 'budgetStatus' && (
+          <BudgetStatusCard budgets={budgets} transactions={transactions} currency={currency} customColor={customColor} />
+        )}
+        {cardId === 'workOverview' && (
+          <WorkOverviewCard works={works} customColor={customColor} onWorkPress={(work) => (navigation as any).navigate('WorkDetail', { workId: work.id })} />
+        )}
+        {cardId === 'netWorth' && (
+          <NetWorthCard transactions={transactions} currency={currency} customColor={customColor} />
+        )}
+        {cardId === 'spendingTrends' && (
+          <SpendingTrendsCard transactions={transactions} currency={currency} customColor={customColor} />
+        )}
+        {cardId === 'topCategories' && (
+          <TopCategoriesCard transactions={transactions} currency={currency} customColor={customColor} />
+        )}
+        {cardId === 'upcomingBills' && (
+          <UpcomingBillsCard bills={bills} currency={currency} customColor={customColor} />
+        )}
+        {cardId === 'goals' && (
+          <EnhancedGoalProgressCard goals={goals} currency={currency} customColor={customColor} onGoalPress={(goal) => (navigation as any).navigate('More', { screen: 'Goals' })} />
+        )}
+        {cardId === 'recentTransactions' && (
+          <RecentTransactionsCard transactions={transactions} currency={currency} customColor={customColor} navigation={navigation} />
+        )}
+      </Pressable>
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <SkeletonList count={4} style={styles.skeletonContainer} />
+      </View>
+    );
+  }
+
+  const handleContextMenuAction = (action: string) => {
+    if (!contextMenu.cardId) return;
+
+    if (action === 'toggle') {
+      toggleCardVisibility(contextMenu.cardId);
+      setContextMenu({ visible: false, cardId: null });
+    }
+  };
+
+  const handleColorChange = (color: string) => {
+    if (!contextMenu.cardId) return;
+    updateCardColor(contextMenu.cardId, color);
+  };
+
+  const currentCardIndex = enabledCards.findIndex((c) => c.id === contextMenu.cardId);
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.greeting, { color: colors.textMuted }]}>
+              Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}
+            </Text>
+            <Text style={[styles.userName, { color: colors.text }]}>
+              {user?.displayName || 'User'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.settingsButton, { backgroundColor: colors.card }]}
+            onPress={() => (navigation as any).navigate('Settings', { screen: 'DashboardCustomization' })}
+          >
+            <Ionicons name="settings" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Enabled Cards */}
+        {enabledCards.length > 0 ? (
+          enabledCards.map((card) => renderCard(card.id as DashboardCardId, card))
+        ) : (
+          <Card>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No cards enabled. Go to settings to customize your dashboard.
+            </Text>
+          </Card>
+        )}
+
+        <View style={styles.bottomPadding} />
+      </ScrollView>
+
+      {/* Context Menu */}
+      <CardContextMenu
+        visible={contextMenu.visible}
+        onDismiss={() => setContextMenu({ visible: false, cardId: null })}
+        onToggleVisibility={() => handleContextMenuAction('toggle')}
+        onChangeColor={handleColorChange}
+        onMove={(direction) => {
+          // Implement reordering logic here
+          setContextMenu({ visible: false, cardId: null });
+        }}
+        canMoveUp={currentCardIndex > 0}
+        canMoveDown={currentCardIndex < enabledCards.length - 1}
+        currentColor={config.cards.find((c) => c.id === contextMenu.cardId)?.customColor}
+      />
+    </View>
+  );
+};
+
+// Balance Card Component (inline for backward compatibility)
+interface BalanceCardProps {
+  transactions: Transaction[];
+  currency: string;
+  customColor?: string;
+}
+
+const BalanceCard: React.FC<BalanceCardProps> = ({ transactions, currency, customColor }) => {
+  const { colors } = useTheme();
+
   const monthlyStats = useMemo(() => {
-    const { start, end } = getMonthRange();
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
     const monthlyTransactions = transactions.filter((t) => {
       const date = new Date(t.date);
       return date >= start && date <= end;
@@ -70,163 +232,78 @@ const DashboardScreen: React.FC = () => {
     return { income, expense, balance: income - expense };
   }, [transactions]);
 
-  // Calculate category data for pie chart
-  const categoryData = useMemo((): CategoryData[] => {
-    const { start, end } = getMonthRange();
-    const monthlyExpenses = transactions.filter(
-      (t) => t.type === 'expense' && new Date(t.date) >= start && new Date(t.date) <= end
-    );
-
-    const categoryTotals: Record<string, number> = {};
-    monthlyExpenses.forEach((t) => {
-      categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
-    });
-
-    return Object.entries(categoryTotals)
-      .map(([category, amount]) => ({
-        name: TRANSACTION_CATEGORIES[category as keyof typeof TRANSACTION_CATEGORIES]?.label || category,
-        amount,
-        color: TRANSACTION_CATEGORIES[category as keyof typeof TRANSACTION_CATEGORIES]?.color || '#6b7280',
-        legendFontColor: colors.text,
-        legendFontSize: 12,
-      }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5);
-  }, [transactions, colors]);
-
-  const recentTransactions = transactions.slice(0, 5);
-  const activeGoals = goals.filter((g) => !g.isCompleted && g.saved < g.target).slice(0, 3);
-  const currency = user?.currency || 'USD';
-
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-        <SkeletonList count={4} style={styles.skeletonContainer} />
-      </View>
-    );
-  }
+  const cardStyle = customColor ? { backgroundColor: customColor } : {};
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-        }
-      >
-        {/* Header */}
-        <View style={styles.header}>
+    <Card style={[styles.balanceCard, cardStyle]}>
+      <Text style={[styles.balanceLabel, { color: colors.textMuted }]}>
+        {formatDate(new Date(), 'MMMM yyyy')} Balance
+      </Text>
+      <Text style={[styles.balanceAmount, { color: colors.text }]}>
+        {formatCurrency(monthlyStats.balance, currency as any)}
+      </Text>
+      <View style={styles.balanceRow}>
+        <View style={styles.balanceItem}>
+          <View style={[styles.balanceIcon, { backgroundColor: colors.success + '20' }]}>
+            <Ionicons name="arrow-down" size={16} color={colors.success} />
+          </View>
           <View>
-            <Text style={[styles.greeting, { color: colors.textMuted }]}>
-              Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}
-            </Text>
-            <Text style={[styles.userName, { color: colors.text }]}>
-              {user?.displayName || 'User'}
+            <Text style={[styles.balanceItemLabel, { color: colors.textMuted }]}>Income</Text>
+            <Text style={[styles.balanceItemAmount, { color: colors.success }]}>
+              {formatCurrency(monthlyStats.income, currency as any)}
             </Text>
           </View>
-          <TouchableOpacity style={[styles.profileButton, { backgroundColor: colors.card }]}>
-            <Ionicons name="person" size={24} color={colors.primary} />
-          </TouchableOpacity>
         </View>
-
-        {/* Balance Card */}
-        <Card style={styles.balanceCard}>
-          <Text style={[styles.balanceLabel, { color: colors.textMuted }]}>
-            {formatDate(new Date(), 'MMMM yyyy')} Balance
-          </Text>
-          <Text style={[styles.balanceAmount, { color: colors.text }]}>
-            {formatCurrency(monthlyStats.balance, currency)}
-          </Text>
-          <View style={styles.balanceRow}>
-            <View style={styles.balanceItem}>
-              <View style={[styles.balanceIcon, { backgroundColor: colors.success + '20' }]}>
-                <Ionicons name="arrow-down" size={16} color={colors.success} />
-              </View>
-              <View>
-                <Text style={[styles.balanceItemLabel, { color: colors.textMuted }]}>Income</Text>
-                <Text style={[styles.balanceItemAmount, { color: colors.success }]}>
-                  {formatCurrency(monthlyStats.income, currency)}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.balanceItem}>
-              <View style={[styles.balanceIcon, { backgroundColor: colors.danger + '20' }]}>
-                <Ionicons name="arrow-up" size={16} color={colors.danger} />
-              </View>
-              <View>
-                <Text style={[styles.balanceItemLabel, { color: colors.textMuted }]}>Expense</Text>
-                <Text style={[styles.balanceItemAmount, { color: colors.danger }]}>
-                  {formatCurrency(monthlyStats.expense, currency)}
-                </Text>
-              </View>
-            </View>
+        <View style={styles.balanceItem}>
+          <View style={[styles.balanceIcon, { backgroundColor: colors.danger + '20' }]}>
+            <Ionicons name="arrow-up" size={16} color={colors.danger} />
           </View>
+          <View>
+            <Text style={[styles.balanceItemLabel, { color: colors.textMuted }]}>Expense</Text>
+            <Text style={[styles.balanceItemAmount, { color: colors.danger }]}>
+              {formatCurrency(monthlyStats.expense, currency as any)}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Card>
+  );
+};
+
+// Recent Transactions Card Component
+interface RecentTransactionsCardProps {
+  transactions: Transaction[];
+  currency: string;
+  customColor?: string;
+  navigation: any;
+}
+
+const RecentTransactionsCard: React.FC<RecentTransactionsCardProps> = ({
+  transactions,
+  currency,
+  customColor,
+  navigation,
+}) => {
+  const { colors } = useTheme();
+
+  const recentTransactions = transactions.slice(0, 5);
+  const cardStyle = customColor ? { backgroundColor: customColor } : {};
+
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Transactions')}>
+          <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
+        </TouchableOpacity>
+      </View>
+      {recentTransactions.length > 0 ? (
+        recentTransactions.map((transaction) => <TransactionItem key={transaction.id} transaction={transaction} />)
+      ) : (
+        <Card>
+          <Text style={[styles.emptyText, { color: colors.textMuted }]}>No transactions yet</Text>
         </Card>
-
-        {/* Spending by Category */}
-        {categoryData.length > 0 && (
-          <Card style={styles.chartCard}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Spending by Category
-            </Text>
-            <PieChart
-              data={categoryData}
-              width={SCREEN_WIDTH - 64}
-              height={180}
-              chartConfig={{
-                color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-              }}
-              accessor="amount"
-              backgroundColor="transparent"
-              paddingLeft="0"
-              absolute
-            />
-          </Card>
-        )}
-
-        {/* Recent Transactions */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Recent Transactions
-            </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Transactions' as never)}>
-              <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          {recentTransactions.length > 0 ? (
-            recentTransactions.map((transaction) => (
-              <TransactionItem key={transaction.id} transaction={transaction} />
-            ))
-          ) : (
-            <Card>
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                No transactions yet. Start by adding one!
-              </Text>
-            </Card>
-          )}
-        </View>
-
-        {/* Savings Goals */}
-        {activeGoals.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Savings Goals
-              </Text>
-              <TouchableOpacity onPress={() => (navigation as any).navigate('More', { screen: 'Goals' })}>
-                <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
-              </TouchableOpacity>
-            </View>
-            {activeGoals.map((goal) => (
-              <GoalCard key={goal.id} goal={goal} />
-            ))}
-          </View>
-        )}
-
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+      )}
     </View>
   );
 };
@@ -255,7 +332,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 4,
   },
-  profileButton: {
+  settingsButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -297,9 +374,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginTop: 2,
-  },
-  chartCard: {
-    marginBottom: 24,
   },
   section: {
     marginBottom: 24,

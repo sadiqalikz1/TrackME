@@ -111,6 +111,25 @@ export const STORAGE_KEYS = {
   CURRENCY: '@trackme_currency',
   LAST_SYNC: '@trackme_last_sync',
   BIOMETRIC: '@trackme_biometric',
+  DASHBOARD_CONFIG: '@trackme_dashboard_config',
+};
+
+// Default Dashboard Configuration
+export const DASHBOARD_DEFAULT_CONFIG = {
+  version: 1,
+  cards: [
+    { id: 'balance' as const, name: 'Balance', enabled: true, position: 0 },
+    { id: 'incomeExpense' as const, name: 'Income & Expense', enabled: true, position: 1 },
+    { id: 'budgetStatus' as const, name: 'Budget Status', enabled: true, position: 2 },
+    { id: 'workOverview' as const, name: 'Work Overview', enabled: true, position: 3 },
+    { id: 'netWorth' as const, name: 'Net Worth', enabled: true, position: 4 },
+    { id: 'spendingTrends' as const, name: 'Spending Trends', enabled: true, position: 5 },
+    { id: 'topCategories' as const, name: 'Top Categories', enabled: true, position: 6 },
+    { id: 'upcomingBills' as const, name: 'Upcoming Bills', enabled: true, position: 7 },
+    { id: 'goals' as const, name: 'Goals Progress', enabled: true, position: 8 },
+    { id: 'recentTransactions' as const, name: 'Recent Transactions', enabled: true, position: 9 },
+  ],
+  lastUpdated: Date.now(),
 };
 
 // Firestore Collections

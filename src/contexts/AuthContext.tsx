@@ -319,10 +319,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!user) return;
     
     try {
-      await updateUserDocument(user.uid, data);
-      const updatedUser = { ...user, ...data, updatedAt: new Date() };
-      setUser(updatedUser);
-      await cacheUser(updatedUser);
+      // For guest users, only update local state and cache (no Firebase)
+      if (user.uid.startsWith('guest_')) {
+        const updatedUser = { ...user, ...data, updatedAt: new Date() };
+        setUser(updatedUser);
+        await cacheUser(updatedUser);
+      } else {
+        // For authenticated users, update both Firebase and local cache
+        await updateUserDocument(user.uid, data);
+        const updatedUser = { ...user, ...data, updatedAt: new Date() };
+        setUser(updatedUser);
+        await cacheUser(updatedUser);
+      }
     } catch (error) {
       console.error('Error updating user:', error);
       throw error;

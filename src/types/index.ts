@@ -314,7 +314,35 @@ export type RootStackParamList = {
   Analysis: undefined;
   Settings: undefined;
   BillReminders: undefined;
+  DashboardCustomization: undefined;
 };
+
+// Dashboard Types
+export type DashboardCardId = 
+  | 'balance'
+  | 'incomeExpense'
+  | 'budgetStatus'
+  | 'workOverview'
+  | 'netWorth'
+  | 'spendingTrends'
+  | 'topCategories'
+  | 'upcomingBills'
+  | 'goals'
+  | 'recentTransactions';
+
+export interface DashboardCard {
+  id: DashboardCardId;
+  name: string;
+  enabled: boolean;
+  position: number;
+  customColor?: string;
+}
+
+export interface DashboardConfig {
+  version: number;
+  cards: DashboardCard[];
+  lastUpdated: number;
+}
 
 // Theme Types
 export interface ThemeColors {

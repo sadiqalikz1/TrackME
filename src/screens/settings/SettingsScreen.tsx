@@ -16,12 +16,11 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Modal, Button } from '@/components/ui';
 import { Currency } from '@/types';
-import { updateUserDocument } from '@/services/firebase';
 import { CURRENCIES } from '@/utils/constants';
 
 const SettingsScreen: React.FC = () => {
   const { colors, isDark, toggleTheme } = useTheme();
-  const { user, signOut: authSignOut } = useAuth();
+  const { user, signOut: authSignOut, updateUser } = useAuth();
   const { showSuccess, showError } = useNotification();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -39,7 +38,7 @@ const SettingsScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      await updateUserDocument(user.uid, { currency });
+      await updateUser({ currency });
       showSuccess(`Currency changed to ${currency}`);
       setCurrencyModalVisible(false);
     } catch (error) {
