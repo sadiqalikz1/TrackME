@@ -12,12 +12,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
-import { Card, Input, Modal, Button, CategoryGrid, EmptyState } from '@/components/ui';
+import { Card, Input, Modal, Button, CategoryGrid, EmptyState, DateTimePicker } from '@/components/ui';
 import { TransactionItem } from '@/components/common';
 import { Transaction, TransactionCategory, TransactionType } from '@/types';
 import { useData, useDataMutations } from '@/hooks';
 import { transactionService } from '@/services/dataService';
 import { COLLECTIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/utils/constants';
+import { formatDate, parseCurrencyInput, isValidAmount } from '@/utils/formatters';
 
 type FilterType = 'all' | 'income' | 'expense';
 
@@ -37,11 +38,16 @@ const TransactionsScreen: React.FC = () => {
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
+  const [dateTimePickerVisible, setDateTimePickerVisible] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionType, setTransactionType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<TransactionCategory>('food');
   const [note, setNote] = useState('');
+  const [transactionDate, setTransactionDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [transactionTime, setTransactionTime] = useState<string>('12:00');
   const [saving, setSaving] = useState(false);
 
   // Handle opening add modal from navigation
@@ -80,6 +86,8 @@ const TransactionsScreen: React.FC = () => {
     setAmount('');
     setCategory('food');
     setNote('');
+    setTransactionDate(new Date().toISOString().split('T')[0]);
+    setTransactionTime('12:00');
     setModalVisible(true);
   };
 
@@ -89,6 +97,8 @@ const TransactionsScreen: React.FC = () => {
     setAmount(transaction.amount.toString());
     setCategory(transaction.category);
     setNote(transaction.note);
+    setTransactionDate(transaction.date);
+    setTransactionTime(transaction.time || '12:00');
     setModalVisible(true);
   };
 
@@ -108,7 +118,8 @@ const TransactionsScreen: React.FC = () => {
         type: transactionType,
         category,
         note,
-        date: new Date(),
+        date: transactionDate,
+        time: transactionTime,
         isRecurring: false,
       };
 
@@ -333,6 +344,47 @@ const TransactionsScreen: React.FC = () => {
           filter={transactionType}
         />
 
+        {/* Date & Time */}
+        <View style={styles.dateTimeContainer}>
+          <View style={styles.dateTimeRow}>
+            <View style={styles.dateTimeItem}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>
+                Date <Text style={{ color: colors.danger }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                onPress={() => setDateTimePickerVisible(true)}
+                style={[
+                  styles.dateTimeButton,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <Ionicons name="calendar" size={20} color={colors.primary} />
+                <Text style={[styles.dateTimeButtonText, { color: colors.text }]}>
+                  {formatDate(transactionDate, 'MMM dd, yyyy')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dateTimeItem}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>
+                Time <Text style={{ color: colors.danger }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                onPress={() => setDateTimePickerVisible(true)}
+                style={[
+                  styles.dateTimeButton,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <Ionicons name="time" size={20} color={colors.primary} />
+                <Text style={[styles.dateTimeButtonText, { color: colors.text }]}>
+                  {transactionTime}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
         {/* Note */}
         <Input
           label="Note (optional)"
@@ -342,6 +394,20 @@ const TransactionsScreen: React.FC = () => {
           multiline
         />
       </Modal>
+
+      {/* Date Time Picker Modal */}
+      <DateTimePicker
+        visible={dateTimePickerVisible}
+        onClose={() => setDateTimePickerVisible(false)}
+        onDateTimeSelected={(date, time) => {
+          setTransactionDate(date.toISOString().split('T')[0]);
+          setTransactionTime(time);
+        }}
+        initialDate={new Date(transactionDate)}
+        initialTime={transactionTime}
+        title="Select Transaction Date & Time"
+        showTime={true}
+      />
     </View>
   );
 };
@@ -428,6 +494,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginBottom: 8,
+  },
+  dateTimeContainer: {
+    marginBottom: 20,
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateTimeItem: {
+    flex: 1,
+  },
+  dateTimeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  dateTimeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

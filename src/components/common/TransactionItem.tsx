@@ -55,7 +55,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
           </Text>
         ) : (
           <Text style={[styles.date, { color: colors.textMuted }]}>
-            {formatRelativeDate(transaction.date)}
+            {formatRelativeDate(transaction.date)} at {transaction.time || '12:00'}
           </Text>
         )}
       </View>
@@ -72,7 +72,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
         </Text>
         {transaction.note && (
           <Text style={[styles.date, { color: colors.textMuted, textAlign: 'right' }]}>
-            {formatRelativeDate(transaction.date)}
+            {formatRelativeDate(transaction.date)} at {transaction.time || '12:00'}
           </Text>
         )}
       </View>

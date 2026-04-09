@@ -15,7 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth } from '@/contexts';
 import { Card, Button } from '@/components/ui';
 import { Work, WorkStatus } from '@/types';
-import { getUserWorks } from '@/services/firebase';
+import { useData } from '@/hooks';
 import { STATUS_COLORS, WORK_CATEGORIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { CURRENCIES } from '@/utils/constants';
@@ -28,29 +28,23 @@ const WorkDashboardScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
 
-  const [works, setWorks] = useState<Work[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use hook for data fetching through service layer (not direct Firebase)
+  const { data: worksData, loading, refetch } = useData('work');
+
   const [refreshing, setRefreshing] = useState(false);
+
+  // Ensure works is an array
+  const works = Array.isArray(worksData) ? worksData : [];
 
   const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
   // Type helper for flexible style unions
   const withStyle = (baseStyle: any, overrides: any = {}) => [baseStyle, overrides] as any;
 
-  useEffect(() => {
-    if (!user) return;
-
-    const unsubscribe = getUserWorks(user.uid, (data) => {
-      setWorks(data);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
   const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await refetch();
+    setRefreshing(false);
   };
 
   // Calculate statistics

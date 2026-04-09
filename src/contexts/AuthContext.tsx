@@ -12,7 +12,7 @@ import {
   signUpWithEmail,
 } from '@/services/firebase';
 import { syncEngine } from '@/services/syncEngine';
-import { setHybridRepositoryUid } from '@/services/repositories/hybridRepository';
+import { setHybridRepositoryUid, setHybridRepositoryGuest } from '@/services/repositories/hybridRepository';
 import { User } from '@/types';
 import { STORAGE_KEYS } from '@/utils/constants';
 
@@ -75,6 +75,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       updatedAt: new Date(),
     };
     await cacheUser(guestUser);
+    setHybridRepositoryGuest(true); // Enable guest mode (local-only)
     console.log(`Created guest user: ${guestUid}`);
     return guestUser;
   };
@@ -202,6 +203,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             syncEngine.enableSync(); // Enable background sync now that user is authenticated
             setIsOfflineMode(false); // Exit offline mode
             setIsGuest(false); // User is authenticated, not a guest
+            setHybridRepositoryGuest(false); // Ensure guest mode is disabled in repository
             setRetryCount(0);
 
             // ========== FETCH FIREBASE DATA AFTER LOGIN ==========
@@ -219,13 +221,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (cachedUser && !isCachedUserStale(cachedUser)) {
               setIsOfflineMode(true); // Enter offline mode
               setUser(cachedUser);
-              setIsGuest(cachedUser.uid.startsWith('guest_'));
+              const isGuest = cachedUser.uid.startsWith('guest_');
+              setIsGuest(isGuest);
+              setHybridRepositoryGuest(isGuest); // Sync guest flag with repository
               console.log('Switched to offline mode with cached user');
             } else {
               // Cached user is stale/missing, must re-login
               setUser(null);
               setIsOfflineMode(false);
               setIsGuest(false);
+              setHybridRepositoryGuest(false); // Ensure guest mode is disabled
             }
           }
         } else {
@@ -240,6 +245,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(cachedUser);
             setIsOfflineMode(true);
             setIsGuest(false);
+            setHybridRepositoryGuest(false); // Ensure guest mode is disabled
             // Set uid for future sync when user comes back online
             setHybridRepositoryUid(cachedUser.uid);
             console.log('Switched to offline mode with cached Firebase user');
@@ -259,9 +265,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Step 3: If we have a cached user, show app immediately (don't wait for Firebase)
       if (cachedUser && !isCachedUserStale(cachedUser)) {
         setIsOfflineMode(true);
-        setIsGuest(cachedUser.uid.startsWith('guest_'));
+        const isGuestUser = cachedUser.uid.startsWith('guest_');
+        setIsGuest(isGuestUser);
+        setHybridRepositoryGuest(isGuestUser); // Sync guest flag with repository
         // If it's a real Firebase user, set uid for future syncs
-        if (!cachedUser.uid.startsWith('guest_')) {
+        if (!isGuestUser) {
           setHybridRepositoryUid(cachedUser.uid);
         }
         setIsLoading(false);

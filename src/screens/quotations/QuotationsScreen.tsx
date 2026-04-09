@@ -16,7 +16,7 @@ import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Button, QuotationModal, EmptyState } from '@/components/ui';
 import { Quotation } from '@/types';
 import { quotationService } from '@/services/dataService';
-import { subscribeToCollection } from '@/services/firebase';
+import { useData } from '@/hooks';
 import { COLLECTIONS, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
@@ -28,36 +28,19 @@ const QuotationsScreen: React.FC = () => {
   const navigation = useNavigation();
   const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
-  const [quotations, setQuotations] = useState<Quotation[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use hook for data fetching through service layer (not direct Firebase)
+  const { data: quotationsData, loading, refetch } = useData('quotations');
+
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'pending' | 'accepted' | 'rejected' | 'expired'>('all');
 
-  useEffect(() => {
-    loadQuotations();
-  }, [user]);
-
-  const loadQuotations = async () => {
-    try {
-      if (!user) return;
-      subscribeToCollection<Quotation>(
-        COLLECTIONS.QUOTATIONS,
-        user.uid,
-        (data) => {
-          setQuotations(data);
-          setLoading(false);
-        }
-      );
-    } catch (error) {
-      showError('Failed to load quotations');
-      setLoading(false);
-    }
-  };
+  // Ensure quotations is an array
+  const quotations = Array.isArray(quotationsData) ? quotationsData : [];
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadQuotations();
+    await refetch();
     setRefreshing(false);
   };
 
@@ -70,7 +53,7 @@ const QuotationsScreen: React.FC = () => {
         onPress: async () => {
           try {
             await quotationService.delete(id);
-            setQuotations(quotations.filter(q => q.id !== id));
+            await refetch();
             showSuccess('Quotation deleted');
           } catch (error) {
             showError('Failed to delete quotation');
@@ -268,7 +251,7 @@ const QuotationsScreen: React.FC = () => {
             await quotationService.create(quoteData);
             showSuccess('Quotation created successfully!');
             setModalVisible(false);
-            await loadQuotations();
+            await refetch();
           } catch (error) {
             showError('Failed to create quotation');
           }

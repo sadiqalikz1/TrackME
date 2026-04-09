@@ -13,6 +13,7 @@ import { IRepository } from './localRepository';
 export class HybridRepository implements IRepository {
   private isOnline: boolean = false;
   private currentUid: string | null = null;
+  private isGuestUser: boolean = false;
 
   constructor() {
     this.initNetworkListener();
@@ -22,6 +23,11 @@ export class HybridRepository implements IRepository {
     this.currentUid = uid;
     setRemoteRepositoryUid(uid); // Pass uid to remoteRepository for filtering
     console.log(`HybridRepository: Set uid for user ${uid}`);
+  }
+
+  setIsGuest(isGuest: boolean): void {
+    this.isGuestUser = isGuest;
+    console.log(`HybridRepository: Guest mode ${isGuest ? 'enabled' : 'disabled'}`);
   }
 
   private initNetworkListener(): void {
@@ -85,8 +91,8 @@ export class HybridRepository implements IRepository {
       // Always save to local first
       await localRepository.saveDocument(collection, id, data);
 
-      // If online, also sync to Firebase immediately
-      if (this.isOnline) {
+      // If online and not guest user, also sync to Firebase immediately
+      if (this.isOnline && !this.isGuestUser) {
         try {
           await remoteRepository.saveDocument(collection, id, data);
           // Mark as synced
@@ -106,8 +112,8 @@ export class HybridRepository implements IRepository {
       // Always update local first
       await localRepository.updateDocument(collection, id, data);
 
-      // If online, also sync to Firebase immediately
-      if (this.isOnline) {
+      // If online and not guest user, also sync to Firebase immediately
+      if (this.isOnline && !this.isGuestUser) {
         try {
           await remoteRepository.updateDocument(collection, id, data);
           // Mark as synced
@@ -127,8 +133,8 @@ export class HybridRepository implements IRepository {
       // Always delete local first
       await localRepository.deleteDocument(collection, id);
 
-      // If online, also sync to Firebase immediately
-      if (this.isOnline) {
+      // If online and not guest user, also sync to Firebase immediately
+      if (this.isOnline && !this.isGuestUser) {
         try {
           await remoteRepository.deleteDocument(collection, id);
           // Mark as synced
@@ -146,16 +152,23 @@ export class HybridRepository implements IRepository {
   /**
    * Sync a collection: Pull latest from Firebase and apply last-write-wins conflict resolution
    * Called in background, doesn't block UI
+   * Skipped for guest users (local-only mode)
    */
   private async syncCollectionInBackground(collection: CollectionName): Promise<void> {
     try {
-      console.log(`Syncing collection: ${collection}`);
+      // Skip remote sync for guest users (local-only mode)
+      if (this.isGuestUser) {
+        console.log(`HybridRepository: Skipping remote sync for ${collection}, guest mode enabled`);
+        return;
+      }
 
       // Skip remote sync if uid not set yet
       if (!this.currentUid) {
         console.log(`HybridRepository: Skipping remote sync for ${collection}, uid not set yet`);
         return;
       }
+
+      console.log(`Syncing collection: ${collection}`);
 
       // Fetch all docs from Firebase
       const remoteDocs = await remoteRepository.getCollection(collection);
@@ -277,4 +290,12 @@ export const hybridRepository = new HybridRepository();
  */
 export function setHybridRepositoryUid(uid: string): void {
   hybridRepository.setCurrentUid(uid);
+}
+
+/**
+ * Helper function to set guest mode (local-only, no Firebase sync)
+ * Call this from AuthContext when guest user is detected
+ */
+export function setHybridRepositoryGuest(isGuest: boolean): void {
+  hybridRepository.setIsGuest(isGuest);
 }

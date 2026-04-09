@@ -16,7 +16,7 @@ import { useTheme, useAuth } from '@/contexts';
 import { Card, SkeletonList } from '@/components/ui';
 import { TransactionItem, GoalCard } from '@/components/common';
 import { Transaction, Goal, CategoryData } from '@/types';
-import { getUserTransactions, getUserGoals } from '@/services/firebase';
+import { useData } from '@/hooks';
 import { TRANSACTION_CATEGORIES } from '@/utils/constants';
 import { formatCurrency, getMonthRange, formatDate } from '@/utils/formatters';
 
@@ -28,33 +28,27 @@ const DashboardScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use hooks for data fetching through service layer (not direct Firebase)
+  const { data: transactionsData, loading: transLoading, refetch: refetchTransactions } = useData('transactions');
+  const { data: goalsData, loading: goalsLoading, refetch: refetchGoals } = useData('goals');
+
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
+  // Ensure data is arrays
+  const transactions = useMemo(() => {
+    return (Array.isArray(transactionsData) ? transactionsData : []) as Transaction[];
+  }, [transactionsData]);
 
-    const unsubTransactions = getUserTransactions(user.uid, (data) => {
-      setTransactions(data);
-      setLoading(false);
-    });
+  const goals = useMemo(() => {
+    return (Array.isArray(goalsData) ? goalsData : []) as Goal[];
+  }, [goalsData]);
 
-    const unsubGoals = getUserGoals(user.uid, (data) => {
-      setGoals(data);
-    });
-
-    return () => {
-      unsubTransactions();
-      unsubGoals();
-    };
-  }, [user]);
+  const loading = transLoading || goalsLoading;
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Data will be refreshed via subscriptions
-    setTimeout(() => setRefreshing(false), 1000);
+    await Promise.all([refetchTransactions(), refetchGoals()]);
+    setRefreshing(false);
   };
 
   // Calculate monthly stats

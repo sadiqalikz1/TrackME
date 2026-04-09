@@ -53,6 +53,7 @@ export interface Transaction {
   description?: string;
   note: string;
   date: string;
+  time: string; // HH:mm format
   isRecurring: boolean;
   recurringId?: string;
   bankAccount?: string;

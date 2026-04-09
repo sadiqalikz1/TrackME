@@ -6,8 +6,10 @@ import { Modal } from './Modal';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
+import { DateTimePicker } from './DateTimePicker';
 import { WorkPayment, PaymentType } from '@/types';
 import { CURRENCIES } from '@/utils/constants';
+import { formatDate } from '@/utils/formatters';
 
 interface WorkPaymentModalProps {
   visible: boolean;
@@ -42,6 +44,7 @@ export const WorkPaymentModal: React.FC<WorkPaymentModalProps> = ({
   const [note, setNote] = useState('');
   const [adding, setAdding] = useState(false);
   const [amountError, setAmountError] = useState(false);
+  const [dateTimePickerVisible, setDateTimePickerVisible] = useState(false);
 
   const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
 
@@ -162,13 +165,21 @@ export const WorkPaymentModal: React.FC<WorkPaymentModalProps> = ({
 
           {/* Date */}
           <View style={{ marginTop: 12 }}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Date</Text>
-            <Input
-              placeholder="YYYY-MM-DD"
-              value={date}
-              onChangeText={setDate}
-              editable={false}
-            />
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              Date <Text style={{ color: colors.danger }}>*</Text>
+            </Text>
+            <TouchableOpacity
+              onPress={() => setDateTimePickerVisible(true)}
+              style={[
+                styles.dateButton,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons name="calendar" size={20} color={colors.primary} />
+              <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                {formatDate(date, 'MMM dd, yyyy')}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Description */}
@@ -244,6 +255,18 @@ export const WorkPaymentModal: React.FC<WorkPaymentModalProps> = ({
           </Card>
         )}
       </ScrollView>
+
+      {/* Date Time Picker Modal */}
+      <DateTimePicker
+        visible={dateTimePickerVisible}
+        onClose={() => setDateTimePickerVisible(false)}
+        onDateTimeSelected={(selectedDate) => {
+          setDate(selectedDate.toISOString().split('T')[0]);
+        }}
+        initialDate={new Date(date)}
+        showTime={false}
+        title="Select Payment Date"
+      />
     </Modal>
   );
 };
@@ -361,5 +384,18 @@ const styles = StyleSheet.create({
   paymentAmount: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  dateButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
