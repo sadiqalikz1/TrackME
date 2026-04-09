@@ -9,6 +9,7 @@ import {
   createUserDocument,
   updateUserDocument,
 } from '@/services/firebase';
+import { syncEngine } from '@/services/syncEngine';
 import { User } from '@/types';
 import { STORAGE_KEYS } from '@/utils/constants';
 
@@ -17,6 +18,7 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isOfflineMode: boolean;
   signOut: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -40,8 +42,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 5;
+  const CACHE_VALIDITY_DAYS = 7;
 
   const loadCachedUser = async () => {
     try {
@@ -52,10 +56,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         parsedUser.createdAt = new Date(parsedUser.createdAt);
         parsedUser.updatedAt = new Date(parsedUser.updatedAt);
         setUser(parsedUser);
+        return parsedUser;
       }
     } catch (error) {
       console.error('Error loading cached user:', error);
     }
+    return null;
+  };
+
+  const isCachedUserStale = (user: User | null): boolean => {
+    if (!user?.updatedAt) return true;
+    const daysSinceUpdate = (Date.now() - new Date(user.updatedAt).getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceUpdate > CACHE_VALIDITY_DAYS;
   };
 
   const cacheUser = async (userData: User | null) => {
@@ -106,30 +118,79 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     initializeFirebase();
-    loadCachedUser();
+    let unsubscribe: (() => void) | null = null;
 
-    const unsubscribe = onAuthChange(async (fbUser) => {
-      setFirebaseUser(fbUser);
-      
-      if (fbUser) {
-        try {
-          const userData = await setupUser(fbUser);
-          setUser(userData);
-          await cacheUser(userData);
-        } catch (error) {
-          console.error('Error in auth change handler:', error);
-          // Fall back to cached user if available
-          await loadCachedUser();
-        }
-      } else {
-        setUser(null);
-        await cacheUser(null);
+    const initializeAuth = async () => {
+      // Initialize SyncEngine (database, network monitoring, background tasks)
+      try {
+        await syncEngine.initialize();
+        syncEngine.monitorNetworkState();
+      } catch (error) {
+        console.error('Failed to initialize SyncEngine:', error);
       }
-      
-      setIsLoading(false);
-    });
 
-    return () => unsubscribe();
+      // Step 1: Load cached user immediately (don't wait for Firebase)
+      const cachedUser = await loadCachedUser();
+      
+      // Step 2: Subscribe to Firebase auth changes
+      unsubscribe = onAuthChange(async (fbUser) => {
+        setFirebaseUser(fbUser);
+        
+        if (fbUser) {
+          try {
+            // Firebase auth succeeded, try to sync user document
+            const userData = await setupUser(fbUser);
+            setUser(userData);
+            await cacheUser(userData);
+            setIsOfflineMode(false); // Exit offline mode
+            setRetryCount(0);
+
+            // Trigger full sync for all collections after successful login
+            try {
+              await syncEngine.manualSync();
+            } catch (error) {
+              console.warn('Initial sync after login failed, will retry in background:', error);
+            }
+          } catch (error) {
+            console.error('Error syncing with Firebase:', error);
+            // Firebase sync failed, but keep using cached user
+            if (cachedUser && !isCachedUserStale(cachedUser)) {
+              setIsOfflineMode(true); // Enter offline mode
+              setUser(cachedUser);
+              console.log('Switched to offline mode with cached user');
+            } else {
+              // Cached user is stale/missing, must re-login
+              setUser(null);
+              setIsOfflineMode(false);
+            }
+          }
+        } else {
+          // Firebase logged out
+          setUser(null);
+          setIsOfflineMode(false);
+          await cacheUser(null);
+        }
+        
+        setIsLoading(false);
+      });
+      
+      // Step 3: If we have a cached user, show it immediately (don't wait for Firebase)
+      if (cachedUser && !isCachedUserStale(cachedUser)) {
+        setIsOfflineMode(true);
+        setIsLoading(false);
+        console.log('Loaded app with cached user (offline mode)');
+      } else if (!cachedUser) {
+        // No cached user, wait for Firebase
+        setIsLoading(true);
+      }
+    };
+
+    initializeAuth();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      syncEngine.destroy();
+    };
   }, []);
 
   const signOut = async () => {
@@ -176,7 +237,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     firebaseUser,
     isLoading,
-    isAuthenticated: !!user && !!firebaseUser,
+    isAuthenticated: !!user, // If user exists (cached or verified), they're authenticated
+    isOfflineMode,
     signOut,
     updateUser,
     refreshUser,

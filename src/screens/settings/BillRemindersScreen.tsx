@@ -13,9 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
+import { useData, useDataMutations, useOfflineStatus } from '@/hooks';
 import { Card, Modal, Button, Input, CategoryPicker, EmptyState } from '@/components/ui';
 import { BillReminder, TransactionCategory, BillFrequency, Transaction } from '@/types';
-import { getUserBillReminders, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
 import { COLLECTIONS, TRANSACTION_CATEGORIES } from '@/utils/constants';
 import { formatCurrency, formatDate, parseCurrencyInput, calculateDaysRemaining } from '@/utils/formatters';
 
@@ -32,10 +32,21 @@ const BillRemindersScreen: React.FC = () => {
   const { showSuccess, showError } = useNotification();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { isOffline } = useOfflineStatus();
 
-  const [bills, setBills] = useState<BillReminder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  // Offline-first data fetching
+  const { data: billsData, loading, refetch } = useData<BillReminder[]>('billReminders');
+  const { create: createBill, update: updateBill, delete: deleteBill } = useDataMutations('billReminders');
+  const { create: createTransaction } = useDataMutations('transactions');
+
+  // Sort bills by due date when they load
+  const bills = billsData && Array.isArray(billsData)
+    ? billsData.sort((a, b) => {
+        const daysA = calculateDaysRemaining(a.dueDate);
+        const daysB = calculateDaysRemaining(b.dueDate);
+        return daysA - daysB;
+      })
+    : [];
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -50,26 +61,8 @@ const BillRemindersScreen: React.FC = () => {
 
   const currency = user?.currency || 'USD';
 
-  useEffect(() => {
-    if (!user) return;
-
-    const unsub = getUserBillReminders(user.uid, (data) => {
-      // Sort by due date
-      const sorted = data.sort((a, b) => {
-        const daysA = calculateDaysRemaining(a.dueDate);
-        const daysB = calculateDaysRemaining(b.dueDate);
-        return daysA - daysB;
-      });
-      setBills(sorted);
-      setLoading(false);
-    });
-
-    return unsub;
-  }, [user]);
-
   const onRefresh = async () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await refetch();
   };
 
   const openAddModal = () => {
@@ -126,16 +119,18 @@ const BillRemindersScreen: React.FC = () => {
       };
 
       if (editingBill) {
-        await updateDocument(COLLECTIONS.BILL_REMINDERS, editingBill.id, billData);
+        await updateBill(editingBill.id, billData);
         showSuccess('Bill updated');
       } else {
-        await createDocument<BillReminder>(COLLECTIONS.BILL_REMINDERS, billData);
+        await createBill(billData);
         showSuccess('Bill reminder created');
       }
 
       setModalVisible(false);
+      await refetch(); // Refresh list after save
     } catch (error) {
       showError('Failed to save bill');
+      console.error('Save error:', error);
     } finally {
       setSaving(false);
     }
@@ -149,10 +144,12 @@ const BillRemindersScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(COLLECTIONS.BILL_REMINDERS, bill.id);
+            await deleteBill(bill.id);
             showSuccess('Bill reminder deleted');
+            await refetch(); // Refresh list after delete
           } catch (error) {
             showError('Failed to delete bill');
+            console.error('Delete error:', error);
           }
         },
       },
@@ -175,13 +172,14 @@ const BillRemindersScreen: React.FC = () => {
           break;
         case 'once':
           // For one-time bills, mark as paid
-          await updateDocument(COLLECTIONS.BILL_REMINDERS, bill.id, { isPaid: true });
+          await updateBill(bill.id, { isPaid: true });
           showSuccess('Bill marked as paid');
+          await refetch();
           return;
       }
 
       // Create transaction for this payment
-      await createDocument<Transaction>(COLLECTIONS.TRANSACTIONS, {
+      await createTransaction({
         uid: user!.uid,
         type: 'expense',
         amount: bill.amount,
@@ -192,12 +190,13 @@ const BillRemindersScreen: React.FC = () => {
       });
 
       // Update bill with next due date
-      await updateDocument(COLLECTIONS.BILL_REMINDERS, bill.id, {
+      await updateBill(bill.id, {
         dueDate: nextDueDate.toISOString().split('T')[0],
         lastPaidDate: new Date().toISOString().split('T')[0],
       });
 
       showSuccess('Marked as paid & transaction recorded');
+      await refetch();
     } catch (error) {
       showError('Failed to process payment');
     }
@@ -288,6 +287,14 @@ const BillRemindersScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Offline Banner */}
+      {isOffline && (
+        <View style={[styles.offlineBanner, { backgroundColor: colors.warning }]}>
+          <Ionicons name="wifi-off" size={16} color="#fff" />
+          <Text style={styles.offlineText}>Offline - Data from cache</Text>
+        </View>
+      )}
+
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -325,7 +332,7 @@ const BillRemindersScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListEmptyComponent={
           <EmptyState
@@ -459,6 +466,19 @@ const BillRemindersScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  offlineText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
