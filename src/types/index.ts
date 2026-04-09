@@ -107,6 +107,25 @@ export interface TimeEntry {
   hoursWorked: number;
 }
 
+export type PaymentType = 'advance' | 'partial' | 'balance' | 'other';
+
+export interface WorkPayment {
+  id: string;
+  type: PaymentType;
+  amount: number;
+  date: string;
+  description?: string;
+  note?: string;
+}
+
+export interface AdditionalWork {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  note?: string;
+}
+
 export interface Quotation {
   id: string;
   uid: string;
@@ -154,6 +173,10 @@ export interface Work {
   timeEntries: TimeEntry[];
   hourlyRate?: number;
   photos: string[];
+  payments: WorkPayment[];
+  additionalWorks: AdditionalWork[];
+  totalPaymentsReceived: number;
+  totalAdditionalAmount: number;
   isProfitTransferred: boolean;
   profitTransferredAmount?: number;
   profitTransferredDate?: Date;

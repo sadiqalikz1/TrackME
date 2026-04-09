@@ -23,8 +23,10 @@ import {
   ProfitTransferModal,
   TimeEntryModal,
   DetailedExpenseModal,
+  WorkPaymentModal,
+  AdditionalWorkModal,
 } from '@/components/ui';
-import { Work, Transaction, TransactionCategory, DetailedExpense, TimeEntry } from '@/types';
+import { Work, Transaction, TransactionCategory, DetailedExpense, TimeEntry, WorkPayment, AdditionalWork } from '@/types';
 import { getWorkById, updateDocument, deleteDocument, createDocument } from '@/services/firebase';
 import { WORK_CATEGORIES, STATUS_COLORS, COLLECTIONS, EXPENSE_TYPES } from '@/utils/constants';
 import { formatCurrency, formatDate, formatPercentage, calculateProfit } from '@/utils/formatters';
@@ -46,6 +48,8 @@ const WorkDetailScreen: React.FC = () => {
   const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [timeModalVisible, setTimeModalVisible] = useState(false);
   const [expenseModalVisible, setExpenseModalVisible] = useState(false);
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [additionalWorkModalVisible, setAdditionalWorkModalVisible] = useState(false);
 
   const currency = user?.currency || 'USD';
 
@@ -324,6 +328,84 @@ const WorkDetailScreen: React.FC = () => {
     }
   };
 
+  // Payment handlers
+  const handleAddPayment = async (payment: Omit<WorkPayment, 'id'>) => {
+    if (!work) return;
+    const newPayment: WorkPayment = {
+      ...payment,
+      id: Date.now().toString(),
+    };
+    const payments = [...(work.payments || []), newPayment];
+    const totalPaymentsReceived = payments.reduce((sum, p) => sum + p.amount, 0);
+
+    try {
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        payments,
+        totalPaymentsReceived,
+      });
+      setWork({ ...work, payments, totalPaymentsReceived });
+      showSuccess('Payment added');
+    } catch (error) {
+      showError('Failed to add payment');
+    }
+  };
+
+  const handleRemovePayment = async (paymentId: string) => {
+    if (!work) return;
+    const payments = work.payments?.filter((p) => p.id !== paymentId) || [];
+    const totalPaymentsReceived = payments.reduce((sum, p) => sum + p.amount, 0);
+
+    try {
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        payments,
+        totalPaymentsReceived,
+      });
+      setWork({ ...work, payments, totalPaymentsReceived });
+      showSuccess('Payment removed');
+    } catch (error) {
+      showError('Failed to remove payment');
+    }
+  };
+
+  // Additional work handlers
+  const handleAddAdditionalWork = async (additionalWork: Omit<AdditionalWork, 'id'>) => {
+    if (!work) return;
+    const newWork: AdditionalWork = {
+      ...additionalWork,
+      id: Date.now().toString(),
+    };
+    const additionalWorks = [...(work.additionalWorks || []), newWork];
+    const totalAdditionalAmount = additionalWorks.reduce((sum, w) => sum + w.amount, 0);
+
+    try {
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        additionalWorks,
+        totalAdditionalAmount,
+      });
+      setWork({ ...work, additionalWorks, totalAdditionalAmount });
+      showSuccess('Additional work added');
+    } catch (error) {
+      showError('Failed to add additional work');
+    }
+  };
+
+  const handleRemoveAdditionalWork = async (workId: string) => {
+    if (!work) return;
+    const additionalWorks = work.additionalWorks?.filter((w) => w.id !== workId) || [];
+    const totalAdditionalAmount = additionalWorks.reduce((sum, w) => sum + w.amount, 0);
+
+    try {
+      await updateDocument(COLLECTIONS.WORKS, work.id, {
+        additionalWorks,
+        totalAdditionalAmount,
+      });
+      setWork({ ...work, additionalWorks, totalAdditionalAmount });
+      showSuccess('Additional work removed');
+    } catch (error) {
+      showError('Failed to remove additional work');
+    }
+  };
+
 
   const handleDelete = () => {
     Alert.alert('Delete Project', 'This action cannot be undone.', [
@@ -557,6 +639,48 @@ const WorkDetailScreen: React.FC = () => {
           />
         </Card>
 
+        {/* Income Payments Tracking */}
+        <Card style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Income Payments</Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                {work.payments?.length || 0} payments received
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setPaymentModalVisible(true)}>
+              <Ionicons name="wallet" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <Button
+            title="Add/View Payments"
+            variant="secondary"
+            onPress={() => setPaymentModalVisible(true)}
+            icon={<Ionicons name="add-circle" size={18} color={colors.primary} />}
+          />
+        </Card>
+
+        {/* Additional Works */}
+        <Card style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Additional Works</Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                {work.additionalWorks?.length || 0} items added
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setAdditionalWorkModalVisible(true)}>
+              <Ionicons name="hammer" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <Button
+            title="Add/View Works"
+            variant="secondary"
+            onPress={() => setAdditionalWorkModalVisible(true)}
+            icon={<Ionicons name="add-circle" size={18} color={colors.primary} />}
+          />
+        </Card>
+
         {/* Description */}
         {work.description && (
           <Card style={styles.card}>
@@ -648,6 +772,22 @@ const WorkDetailScreen: React.FC = () => {
         onClose={() => setExpenseModalVisible(false)}
         onAddExpense={handleAddExpense}
         onRemoveExpense={handleRemoveExpense}
+      />
+
+      <WorkPaymentModal
+        visible={paymentModalVisible}
+        payments={work.payments || []}
+        onClose={() => setPaymentModalVisible(false)}
+        onAddPayment={handleAddPayment}
+        onRemovePayment={handleRemovePayment}
+      />
+
+      <AdditionalWorkModal
+        visible={additionalWorkModalVisible}
+        additionalWorks={work.additionalWorks || []}
+        onClose={() => setAdditionalWorkModalVisible(false)}
+        onAddWork={handleAddAdditionalWork}
+        onRemoveWork={handleRemoveAdditionalWork}
       />
     </View>
   );

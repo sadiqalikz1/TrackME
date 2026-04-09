@@ -10,3 +10,5 @@ export { ProfitTransferModal } from './ProfitTransferModal';
 export { TimeEntryModal } from './TimeEntryModal';
 export { DetailedExpenseModal } from './DetailedExpenseModal';
 export { QuotationModal } from './QuotationModal';
+export { WorkPaymentModal } from './WorkPaymentModal';
+export { AdditionalWorkModal } from './AdditionalWorkModal';

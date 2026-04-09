@@ -14,6 +14,7 @@ import LoginScreen from '@/screens/auth/LoginScreen';
 import DashboardScreen from '@/screens/dashboard/DashboardScreen';
 import TransactionsScreen from '@/screens/transactions/TransactionsScreen';
 import WorkScreen from '@/screens/work/WorkScreen';
+import WorkDashboardScreen from '@/screens/work/WorkDashboardScreen';
 import WorkDetailScreen from '@/screens/work/WorkDetailScreen';
 import MoreMenuScreen from '@/screens/more/MoreMenuScreen';
 import BudgetsScreen from '@/screens/budgets/BudgetsScreen';
@@ -40,6 +41,7 @@ const WorkStackNavigator = () => {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
+      <WorkStack.Screen name="WorkDashboard" component={WorkDashboardScreen} />
       <WorkStack.Screen name="WorkMain" component={WorkScreen} />
       <WorkStack.Screen name="WorkDetail" component={WorkDetailScreen} />
     </WorkStack.Navigator>
