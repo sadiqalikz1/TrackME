@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Alert, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Alert, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, useAuth } from '@/contexts';
 import { Modal } from './Modal';
@@ -161,14 +161,15 @@ export const WorkPaymentModal: React.FC<WorkPaymentModalProps> = ({
             <Text style={[styles.label, { color: colors.textSecondary }]}>
               Amount <Text style={{ color: colors.danger }}>*</Text>
             </Text>
-            <View style={[styles.inputBox, { borderColor: amountError ? colors.danger : colors.border, borderWidth: amountError ? 2 : 1 }]}>
+            <View style={[styles.inputBox, { borderColor: amountError ? colors.danger : colors.border, borderWidth: amountError ? 2 : 1, backgroundColor: colors.inputBackground }]}>
               <Text style={[styles.currency, { color: colors.textSecondary }]}>{currencyInfo.symbol}</Text>
-              <Input
+              <TextInput
                 placeholder="0.00"
+                placeholderTextColor={colors.textMuted}
                 value={amount}
                 onChangeText={(text) => { setAmount(text); setAmountError(false); }}
                 keyboardType="decimal-pad"
-                style={{ flex: 1, borderWidth: 0 }}
+                style={[styles.amountInput, { color: colors.text }]}
               />
             </View>
             {amountError && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 4 }}>Please enter a valid amount</Text>}
@@ -359,7 +360,14 @@ const styles = StyleSheet.create({
   currency: {
     fontSize: 16,
     fontWeight: '600',
-    marginRight: 4,
+    marginRight: 8,
+    marginLeft: 4,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
   },
   paymentRow: {
     flexDirection: 'row',
