@@ -41,15 +41,18 @@ export const WorkPaymentModal: React.FC<WorkPaymentModalProps> = ({
   const [description, setDescription] = useState('');
   const [note, setNote] = useState('');
   const [adding, setAdding] = useState(false);
+  const [amountError, setAmountError] = useState(false);
 
   const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
 
   const handleAddPayment = async () => {
     const paymentAmount = parseFloat(amount) || 0;
     if (paymentAmount <= 0) {
+      setAmountError(true);
       Alert.alert('Invalid Amount', 'Please enter a valid payment amount');
       return;
     }
+    setAmountError(false);
 
     setAdding(true);
     try {
@@ -140,18 +143,21 @@ export const WorkPaymentModal: React.FC<WorkPaymentModalProps> = ({
           </View>
 
           {/* Amount */}
-          <View style={{ marginTop: 12 }}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Amount</Text>
-            <View style={[styles.inputBox, { borderColor: colors.border }]}>
+          <View style={{ marginTop: 12, marginHorizontal: 0 }}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              Amount <Text style={{ color: colors.danger }}>*</Text>
+            </Text>
+            <View style={[styles.inputBox, { borderColor: amountError ? colors.danger : colors.border, borderWidth: amountError ? 2 : 1 }]}>
               <Text style={[styles.currency, { color: colors.textSecondary }]}>{currencyInfo.symbol}</Text>
               <Input
                 placeholder="0.00"
                 value={amount}
-                onChangeText={setAmount}
+                onChangeText={(text) => { setAmount(text); setAmountError(false); }}
                 keyboardType="decimal-pad"
                 style={{ flex: 1, borderWidth: 0 }}
               />
             </View>
+            {amountError && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 4 }}>Please enter a valid amount</Text>}
           </View>
 
           {/* Date */}

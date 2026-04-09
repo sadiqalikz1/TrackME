@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, useAuth } from '@/contexts';
 import { Modal } from './Modal';
@@ -8,6 +8,8 @@ import { Card } from './Card';
 import { DetailedExpense, ExpenseType } from '@/types';
 import { EXPENSE_TYPES, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
+
+const UNIT_OPTIONS = ['pcs', 'ft', 'm', 'kg', 'g', 'L', 'ml', 'hr', 'box', 'set'];
 
 interface DetailedExpenseModalProps {
   visible: boolean;
@@ -32,14 +34,43 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [quantity, setQuantity] = useState('1');
-  const [unit, setUnit] = useState('');
+  const [unit, setUnit] = useState('pcs');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [adding, setAdding] = useState(false);
+  const [showUnitPicker, setShowUnitPicker] = useState(false);
+  const [descriptionError, setDescriptionError] = useState(false);
+  const [amountError, setAmountError] = useState(false);
+  const [unitError, setUnitError] = useState(false);
 
   const handleAddExpense = async () => {
     const expenseAmount = parseFloat(amount) || 0;
-    if (!description.trim() || expenseAmount <= 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid description and amount');
+    const desc = description.trim();
+    const unitVal = unit.trim();
+    
+    let hasError = false;
+    if (!desc) {
+      setDescriptionError(true);
+      hasError = true;
+    } else {
+      setDescriptionError(false);
+    }
+    
+    if (expenseAmount <= 0) {
+      setAmountError(true);
+      hasError = true;
+    } else {
+      setAmountError(false);
+    }
+    
+    if (!unitVal) {
+      setUnitError(true);
+      hasError = true;
+    } else {
+      setUnitError(false);
+    }
+    
+    if (hasError) {
+      Alert.alert('Invalid Input', 'Please fill in all required fields');
       return;
     }
 
@@ -156,31 +187,37 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
 
           {/* Description */}
           <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Description</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              Description <Text style={{ color: colors.danger }}>*</Text>
+            </Text>
             <TextInput
-              style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+              style={[styles.input, { borderColor: descriptionError ? colors.danger : colors.border, borderWidth: descriptionError ? 2 : 1, color: colors.text }]}
               placeholder="What did you buy?"
               placeholderTextColor={colors.textSecondary}
               value={description}
-              onChangeText={setDescription}
+              onChangeText={(text) => { setDescription(text); setDescriptionError(false); }}
             />
+            {descriptionError && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 4 }}>Description is required</Text>}
           </View>
 
           {/* Amount */}
           <View style={styles.rowInputs}>
             <View style={styles.halfInput}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Amount</Text>
-              <View style={[styles.inputBox, { borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>
+                Amount <Text style={{ color: colors.danger }}>*</Text>
+              </Text>
+              <View style={[styles.inputBox, { borderColor: amountError ? colors.danger : colors.border, borderWidth: amountError ? 2 : 1 }]}>
                 <Text style={[styles.currency, { color: colors.textSecondary }]}>$</Text>
                 <TextInput
                   style={[styles.input, { color: colors.text, flex: 1 }]}
                   placeholder="0.00"
                   placeholderTextColor={colors.textSecondary}
                   value={amount}
-                  onChangeText={setAmount}
+                  onChangeText={(text) => { setAmount(text); setAmountError(false); }}
                   keyboardType="decimal-pad"
                 />
               </View>
+              {amountError && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 4 }}>Amount is required</Text>}
             </View>
 
             {/* Quantity */}
@@ -198,14 +235,54 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
 
             {/* Unit */}
             <View style={styles.halfInput}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Unit</Text>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, color: colors.text }]}
-                placeholder="kg, L, etc"
-                placeholderTextColor={colors.textSecondary}
-                value={unit}
-                onChangeText={setUnit}
-              />
+              <Text style={[styles.label, { color: colors.textSecondary }]}>
+                Unit <Text style={{ color: colors.danger }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowUnitPicker(!showUnitPicker)}
+                style={[styles.input, { 
+                  borderColor: unitError ? colors.danger : colors.border, 
+                  borderWidth: unitError ? 2 : 1,
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingHorizontal: 12
+                }]}
+              >
+                <Text style={{ color: unit ? colors.text : colors.textSecondary, fontSize: 14 }}>
+                  {unit || 'Select unit'}
+                </Text>
+                <Ionicons 
+                  name={showUnitPicker ? 'chevron-up' : 'chevron-down'} 
+                  size={16} 
+                  color={colors.primary} 
+                />
+              </TouchableOpacity>
+              {unitError && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 4 }}>Unit is required</Text>}
+              
+              {showUnitPicker && (
+                <View style={[styles.unitDropdown, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                  <ScrollView>
+                    {UNIT_OPTIONS.map((opt) => (
+                      <TouchableOpacity
+                        key={opt}
+                        onPress={() => { setUnit(opt); setShowUnitPicker(false); setUnitError(false); }}
+                        style={[styles.unitOption, { 
+                          backgroundColor: unit === opt ? colors.primary + '15' : 'transparent',
+                          borderBottomColor: colors.border
+                        }]}
+                      >
+                        <Text style={[styles.unitOptionText, { 
+                          color: unit === opt ? colors.primary : colors.text,
+                          fontWeight: unit === opt ? '600' : '500'
+                        }]}>
+                          {opt}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
           </View>
 
@@ -280,9 +357,6 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
     </Modal>
   );
 };
-
-// ScrollView import
-import { ScrollView } from 'react-native';
 
 const styles = StyleSheet.create({
   container: {
@@ -411,5 +485,19 @@ const styles = StyleSheet.create({
   expenseAmount: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  unitDropdown: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 4,
+    maxHeight: 150,
+  },
+  unitOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  unitOptionText: {
+    fontSize: 13,
   },
 });

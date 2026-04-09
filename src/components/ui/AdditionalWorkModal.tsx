@@ -34,13 +34,32 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState('');
   const [adding, setAdding] = useState(false);
+  const [descriptionError, setDescriptionError] = useState(false);
+  const [amountError, setAmountError] = useState(false);
 
   const totalAdditionalAmount = additionalWorks.reduce((sum, w) => sum + w.amount, 0);
 
   const handleAddWork = async () => {
     const workAmount = parseFloat(amount) || 0;
-    if (!description.trim() || workAmount <= 0) {
-      Alert.alert('Invalid Input', 'Please enter description and valid amount');
+    const desc = description.trim();
+    
+    let hasError = false;
+    if (!desc) {
+      setDescriptionError(true);
+      hasError = true;
+    } else {
+      setDescriptionError(false);
+    }
+    
+    if (workAmount <= 0) {
+      setAmountError(true);
+      hasError = true;
+    } else {
+      setAmountError(false);
+    }
+    
+    if (hasError) {
+      Alert.alert('Invalid Input', 'Please fill in all required fields');
       return;
     }
 
@@ -91,30 +110,37 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
 
           {/* Description */}
           <View style={{ marginTop: 12 }}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Work Description *</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              Work Description <Text style={{ color: colors.danger }}>*</Text>
+            </Text>
             <Input
               placeholder="e.g., Additional wiring installation"
               value={description}
-              onChangeText={setDescription}
+              onChangeText={(text) => { setDescription(text); setDescriptionError(false); }}
               maxLength={100}
+              style={{ borderColor: descriptionError ? colors.danger : undefined, borderWidth: descriptionError ? 2 : 1 }}
             />
+            {descriptionError && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 4 }}>Description is required</Text>}
           </View>
 
           {/* Amount */}
-          <View style={{ marginTop: 12 }}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Amount *</Text>
-            <View style={[styles.inputBox, { borderColor: colors.border }]}>
+          <View style={{ marginTop: 12, marginHorizontal: 0 }}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              Amount <Text style={{ color: colors.danger }}>*</Text>
+            </Text>
+            <View style={[styles.inputBox, { borderColor: amountError ? colors.danger : colors.border, borderWidth: amountError ? 2 : 1 }]}>
               <Text style={[styles.currency, { color: colors.textSecondary }]}>
                 {currencyInfo.symbol}
               </Text>
               <Input
                 placeholder="0.00"
                 value={amount}
-                onChangeText={setAmount}
+                onChangeText={(text) => { setAmount(text); setAmountError(false); }}
                 keyboardType="decimal-pad"
                 style={{ flex: 1, borderWidth: 0 }}
               />
             </View>
+            {amountError && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 4 }}>Please enter a valid amount</Text>}
           </View>
 
           {/* Date */}
