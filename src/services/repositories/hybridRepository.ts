@@ -1,6 +1,6 @@
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { localRepository } from './localRepository';
-import { remoteRepository } from './remoteRepository';
+import { remoteRepository, setRemoteRepositoryUid } from './remoteRepository';
 import { database, CollectionName } from '../database';
 import { IRepository } from './localRepository';
 
@@ -12,9 +12,16 @@ import { IRepository } from './localRepository';
  */
 export class HybridRepository implements IRepository {
   private isOnline: boolean = false;
+  private currentUid: string | null = null;
 
   constructor() {
     this.initNetworkListener();
+  }
+
+  setCurrentUid(uid: string): void {
+    this.currentUid = uid;
+    setRemoteRepositoryUid(uid); // Pass uid to remoteRepository for filtering
+    console.log(`HybridRepository: Set uid for user ${uid}`);
   }
 
   private initNetworkListener(): void {
@@ -144,6 +151,12 @@ export class HybridRepository implements IRepository {
     try {
       console.log(`Syncing collection: ${collection}`);
 
+      // Skip remote sync if uid not set yet
+      if (!this.currentUid) {
+        console.log(`HybridRepository: Skipping remote sync for ${collection}, uid not set yet`);
+        return;
+      }
+
       // Fetch all docs from Firebase
       const remoteDocs = await remoteRepository.getCollection(collection);
 
@@ -190,6 +203,11 @@ export class HybridRepository implements IRepository {
   async fullSync(collection: CollectionName): Promise<void> {
     if (!this.isOnline) {
       console.warn(`HybridRepository: Cannot sync ${collection}, device is offline`);
+      return;
+    }
+
+    if (!this.currentUid) {
+      console.warn(`HybridRepository: Cannot sync ${collection}, user uid not set yet`);
       return;
     }
 
@@ -252,3 +270,11 @@ export class HybridRepository implements IRepository {
 }
 
 export const hybridRepository = new HybridRepository();
+
+/**
+ * Helper function to set the current user's uid in both repositories
+ * Call this from AuthContext after successful login
+ */
+export function setHybridRepositoryUid(uid: string): void {
+  hybridRepository.setCurrentUid(uid);
+}

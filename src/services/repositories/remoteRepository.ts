@@ -19,13 +19,23 @@ import { IRepository } from './localRepository';
  * Used when online to fetch from or write to Firebase
  */
 export class RemoteRepository implements IRepository {
+  private currentUid: string | null = null;
+
+  /**
+   * Set current user uid for filtering queries (required for Firestore security rules)
+   */
+  setCurrentUid(uid: string): void {
+    this.currentUid = uid;
+  }
+
   async getCollection(collectionName: CollectionName): Promise<any[]> {
     try {
       const db = getFirebaseDb();
       const collRef = collection(db, collectionName);
 
-      // Query all non-deleted documents
-      const q = query(collRef, where('deletedAt', '==', null));
+      // Filter by uid + non-deleted documents (required for Firestore security rules)
+      const constraints = [where('uid', '==', this.currentUid), where('deletedAt', '==', null)];
+      const q = query(collRef, ...constraints);
       const snapshot = await getDocs(q);
 
       const docs = snapshot.docs.map(doc => ({
@@ -107,3 +117,10 @@ export class RemoteRepository implements IRepository {
 }
 
 export const remoteRepository = new RemoteRepository();
+
+/**
+ * Update remote repository with current user uid
+ */
+export function setRemoteRepositoryUid(uid: string): void {
+  remoteRepository.setCurrentUid(uid);
+}

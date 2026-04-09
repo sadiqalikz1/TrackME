@@ -10,6 +10,7 @@ import {
   updateUserDocument,
 } from '@/services/firebase';
 import { syncEngine } from '@/services/syncEngine';
+import { setHybridRepositoryUid } from '@/services/repositories/hybridRepository';
 import { User } from '@/types';
 import { STORAGE_KEYS } from '@/utils/constants';
 
@@ -142,6 +143,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const userData = await setupUser(fbUser);
             setUser(userData);
             await cacheUser(userData);
+            setHybridRepositoryUid(fbUser.uid); // Enable uid filtering in repositories
+            syncEngine.enableSync(); // Enable background sync now that user is authenticated
             setIsOfflineMode(false); // Exit offline mode
             setRetryCount(0);
 
@@ -199,6 +202,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null);
       setFirebaseUser(null);
       await cacheUser(null);
+      syncEngine.disableSync(); // Disable sync after logout
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;

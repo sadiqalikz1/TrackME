@@ -21,6 +21,7 @@ export class SyncEngine {
   private syncTimer: NodeJS.Timeout | null = null;
   private lastNetworkState: boolean = false;
   private isSyncingAllowed: boolean = true;
+  private isSyncEnabled: boolean = false; // Don't start syncing until user is authenticated
 
   constructor() {
     this.lastNetworkState = hybridRepository.getNetworkStatus();
@@ -119,6 +120,11 @@ export class SyncEngine {
    * Perform sync operation with retry logic
    */
   private async performSync(retryCount: number = 0): Promise<void> {
+    if (!this.isSyncEnabled) {
+      console.log('Sync not yet enabled (user not authenticated), skipping...');
+      return;
+    }
+
     if (this.syncInProgress) {
       console.log('Sync already in progress, skipping...');
       return;
@@ -203,6 +209,22 @@ export class SyncEngine {
   async manualSync(): Promise<void> {
     console.log('Manual sync triggered');
     await this.performSync();
+  }
+
+  /**
+   * Enable syncing (call after user authentication)
+   */
+  enableSync(): void {
+    this.isSyncEnabled = true;
+    console.log('Sync enabled for authenticated user');
+  }
+
+  /**
+   * Disable syncing (call on logout)
+   */
+  disableSync(): void {
+    this.isSyncEnabled = false;
+    console.log('Sync disabled');
   }
 
   /**
