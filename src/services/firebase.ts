@@ -11,6 +11,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  getReactNativePersistence,
 } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -54,7 +55,10 @@ let db: Firestore | undefined;
 export const initializeFirebase = () => {
   if (getApps().length === 0) {
     app = initializeApp(firebaseConfig);
-    auth = initializeAuth(app);
+    // Initialize Auth with AsyncStorage persistence
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
     db = getFirestore(app);
   } else {
     app = getApps()[0];

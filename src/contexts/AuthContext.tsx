@@ -234,11 +234,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setFirebaseUser(null);
           syncEngine.disableSync();
           
-          // Create new guest user for continued offline use
-          const guestUser = await createGuestUser();
-          setUser(guestUser);
-          setIsGuest(true);
-          setIsOfflineMode(true);
+          // Check if we have a valid cached REAL Firebase user (not a guest)
+          if (cachedUser && !isCachedUserStale(cachedUser) && !cachedUser.uid.startsWith('guest_')) {
+            // Keep using the cached real user in offline mode
+            setUser(cachedUser);
+            setIsOfflineMode(true);
+            setIsGuest(false);
+            // Set uid for future sync when user comes back online
+            setHybridRepositoryUid(cachedUser.uid);
+            console.log('Switched to offline mode with cached Firebase user');
+          } else {
+            // No valid cached real user, create new guest user for continued offline use
+            const guestUser = await createGuestUser();
+            setUser(guestUser);
+            setIsGuest(true);
+            setIsOfflineMode(true);
+            console.log('Created new guest user for offline mode');
+          }
         }
         
         setIsLoading(false);
@@ -248,6 +260,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (cachedUser && !isCachedUserStale(cachedUser)) {
         setIsOfflineMode(true);
         setIsGuest(cachedUser.uid.startsWith('guest_'));
+        // If it's a real Firebase user, set uid for future syncs
+        if (!cachedUser.uid.startsWith('guest_')) {
+          setHybridRepositoryUid(cachedUser.uid);
+        }
         setIsLoading(false);
         console.log(`Loaded cached user: ${cachedUser.displayName}`);
       } else {
@@ -272,6 +288,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signOut = async () => {
     try {
       console.log('Signing out user...');
+      // Clear cache FIRST so onAuthChange doesn't reload the old user
+      await cacheUser(null);
       await firebaseSignOut();
       setUser(null);
       setFirebaseUser(null);

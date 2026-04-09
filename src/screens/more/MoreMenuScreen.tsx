@@ -152,7 +152,7 @@ const MoreMenuScreen: React.FC = () => {
               You're using the app offline. Data is saved locally only.
             </Text>
             <Button
-              label="Sign In with Email"
+              title="Sign In with Email"
               onPress={() => {
                 setError('');
                 setShowLoginModal(true);
@@ -160,7 +160,7 @@ const MoreMenuScreen: React.FC = () => {
               style={styles.authButton}
             />
             <Button
-              label="Create Account"
+              title="Create Account"
               onPress={() => {
                 setError('');
                 setShowSignupModal(true);
@@ -263,14 +263,14 @@ const MoreMenuScreen: React.FC = () => {
             />
 
             <Button
-              label={isLoading ? 'Signing In...' : 'Sign In'}
+              title={isLoading ? 'Signing In...' : 'Sign In'}
               onPress={handleLogin}
               disabled={isLoading || !loginEmail || !loginPassword}
               style={styles.submitButton}
             />
 
             <Button
-              label="Cancel"
+              title="Cancel"
               onPress={() => setShowLoginModal(false)}
               variant="outline"
               disabled={isLoading}
@@ -335,7 +335,7 @@ const MoreMenuScreen: React.FC = () => {
             />
 
             <Button
-              label={isLoading ? 'Creating...' : 'Create Account'}
+              title={isLoading ? 'Creating...' : 'Create Account'}
               onPress={handleSignup}
               disabled={
                 isLoading ||
@@ -348,7 +348,7 @@ const MoreMenuScreen: React.FC = () => {
             />
 
             <Button
-              label="Cancel"
+              title="Cancel"
               onPress={() => setShowSignupModal(false)}
               variant="outline"
               disabled={isLoading}
