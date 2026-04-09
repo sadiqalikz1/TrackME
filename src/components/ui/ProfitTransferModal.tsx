@@ -7,7 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { DEFAULT_BANKS } from '@/utils/constants';
 import { TransactionCategory } from '@/types';
-import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
+import { setUserActionInProgress, pauseCollectionSync, resumeCollectionSync } from '@/services/repositories/hybridRepository';
 
 interface ProfitTransferModalProps {
   visible: boolean;
@@ -35,10 +35,10 @@ export const ProfitTransferModal: React.FC<ProfitTransferModalProps> = ({
   // Pause background sync while user is filling the form
   useEffect(() => {
     if (visible) {
-      setUserActionInProgress(true);
+      pauseCollectionSync('transactions');
     }
     return () => {
-      setUserActionInProgress(false);
+      resumeCollectionSync('transactions');
     };
   }, [visible]);
 

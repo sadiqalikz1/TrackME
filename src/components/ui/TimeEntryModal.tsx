@@ -7,7 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { TimeEntry } from '@/types';
 import { formatDate } from '@/utils/formatters';
-import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
+import { setUserActionInProgress, pauseCollectionSync, resumeCollectionSync } from '@/services/repositories/hybridRepository';
 
 interface TimeEntryModalProps {
   visible: boolean;
@@ -18,7 +18,7 @@ interface TimeEntryModalProps {
   onRemoveTime: (entryId: string) => Promise<void>;
 }
 
-export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
+const TimeEntryModalComponent: React.FC<TimeEntryModalProps> = ({
   visible,
   timeEntries,
   totalHours,
@@ -36,10 +36,10 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
   // Pause background sync while user is filling the form
   useEffect(() => {
     if (visible) {
-      setUserActionInProgress(true);
+      pauseCollectionSync('work');
     }
     return () => {
-      setUserActionInProgress(false);
+      resumeCollectionSync('work');
     };
   }, [visible]);
 
@@ -237,6 +237,9 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
     </Modal>
   );
 };
+
+// ✅ Memoize component to prevent re-renders from parent prop changes
+export const TimeEntryModal = React.memo(TimeEntryModalComponent) as typeof TimeEntryModalComponent;
 
 const styles = StyleSheet.create({
   container: {

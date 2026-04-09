@@ -6,17 +6,17 @@ import { IRepository } from './localRepository';
 
 /**
  * HybridRepository: Smart routing between local and remote repositories
- * - Offline: Use LocalRepository only
- * - Online: Read from local cache, sync with Firebase in background
- * - Conflict resolution: Last-write-wins
+ * - Offline: Use LocalRepository only  
+ * - Online: Syncs on explicit events (app startup, CRUD ops, network transitions)
+ * - Conflict resolution: Last-write-wins on sync
+ * - Event-driven: No periodic background syncing
  */
 export class HybridRepository implements IRepository {
   private isOnline: boolean = false;
   private currentUid: string | null = null;
   private isGuestUser: boolean = false;
-  private isUserActionInProgress: boolean = false; // Flag to prevent sync during user actions
-  private lastSyncTimes: Map<string, number> = new Map(); // Track last sync time per collection
-  private readonly SYNC_DEBOUNCE_MS = 30000; // 30 seconds minimum between syncs per collection
+  private isUserActionInProgress: boolean = false; // Flag to prevent ALL sync during user actions
+  private pausedCollections: Set<string> = new Set(); // Track collections with paused syncing
 
   constructor() {
     this.initNetworkListener();
@@ -34,14 +34,12 @@ export class HybridRepository implements IRepository {
   }
 
   /**
-   * Set user action in progress flag
-   * When true, background sync is paused to avoid interrupting user
+   * Set user action in progress flag (legacy, no-op in event-driven mode)
+   * Previously prevented background sync, now only kept for compatibility
    */
   setUserActionInProgress(inProgress: boolean): void {
     this.isUserActionInProgress = inProgress;
-    if (inProgress) {
-      console.log('HybridRepository: User action in progress, background sync paused');
-    }
+    // In event-driven mode, background sync doesn't exist, so this is a no-op
   }
 
   /**
@@ -49,6 +47,30 @@ export class HybridRepository implements IRepository {
    */
   isUserActionActive(): boolean {
     return this.isUserActionInProgress;
+  }
+
+  /**
+   * Pause sync for a specific collection (legacy, no-op in event-driven mode)
+   * Previously prevented background sync, now only kept for compatibility
+   */
+  pauseCollectionSync(collection: string): void {
+    this.pausedCollections.add(collection);
+    // In event-driven mode, background sync doesn't exist
+  }
+
+  /**
+   * Resume sync for a specific collection (legacy, no-op in event-driven mode)
+   */
+  resumeCollectionSync(collection: string): void {
+    this.pausedCollections.delete(collection);
+    // In event-driven mode, background sync doesn't exist
+  }
+
+  /**
+   * Check if a collection is paused (legacy, always false in event-driven mode)
+   */
+  private isCollectionPaused(collection: string): boolean {
+    return false; // Event-driven mode doesn't do background sync
   }
 
   private initNetworkListener(): void {
@@ -248,9 +270,8 @@ export class HybridRepository implements IRepository {
       // Always read from local first (faster, works offline)
       const localDocs = await localRepository.getCollection(collection);
 
-      // NOTE: Background sync is now handled by SyncEngine on a schedule
-      // This prevents aggressive syncing on every read which causes UI flickering
-      // Do NOT call syncCollectionInBackground here
+      // NOTE: Event-driven sync only - sync happens on app startup, CRUD ops, or network transitions
+      // Not on reads to prevent constant syncing
 
       return localDocs;
     } catch (error) {
@@ -285,14 +306,14 @@ export class HybridRepository implements IRepository {
       // Always save to local first
       await localRepository.saveDocument(collection, id, data);
 
-      // If online and not guest user, also sync to Firebase immediately
+      // If online and not guest user, sync immediately to Firebase (event-driven)
       if (this.isOnline && !this.isGuestUser) {
         try {
           await remoteRepository.saveDocument(collection, id, data);
-          // Mark as synced
           await database.markDocumentSynced(collection, id);
+          console.log(`HybridRepository: Event-driven sync - created ${collection}/${id}`);
         } catch (error) {
-          console.warn(`HybridRepository: Failed to sync save to Firebase, will retry later:`, error);
+          console.warn(`HybridRepository: Failed to sync create to Firebase, will sync on app startup:`, error);
         }
       }
     } catch (error) {
@@ -306,14 +327,14 @@ export class HybridRepository implements IRepository {
       // Always update local first
       await localRepository.updateDocument(collection, id, data);
 
-      // If online and not guest user, also sync to Firebase immediately
+      // If online and not guest user, sync immediately to Firebase (event-driven)
       if (this.isOnline && !this.isGuestUser) {
         try {
           await remoteRepository.updateDocument(collection, id, data);
-          // Mark as synced
           await database.markDocumentSynced(collection, id);
+          console.log(`HybridRepository: Event-driven sync - updated ${collection}/${id}`);
         } catch (error) {
-          console.warn(`HybridRepository: Failed to sync update to Firebase, will retry later:`, error);
+          console.warn(`HybridRepository: Failed to sync update to Firebase, will sync on app startup:`, error);
         }
       }
     } catch (error) {
@@ -327,14 +348,14 @@ export class HybridRepository implements IRepository {
       // Always delete local first
       await localRepository.deleteDocument(collection, id);
 
-      // If online and not guest user, also sync to Firebase immediately
+      // If online and not guest user, sync immediately to Firebase (event-driven)
       if (this.isOnline && !this.isGuestUser) {
         try {
           await remoteRepository.deleteDocument(collection, id);
-          // Mark as synced
           await database.markDocumentSynced(collection, id);
+          console.log(`HybridRepository: Event-driven sync - deleted ${collection}/${id}`);
         } catch (error) {
-          console.warn(`HybridRepository: Failed to sync delete to Firebase, will retry later:`, error);
+          console.warn(`HybridRepository: Failed to sync delete to Firebase, will sync on app startup:`, error);
         }
       }
     } catch (error) {
@@ -344,35 +365,50 @@ export class HybridRepository implements IRepository {
   }
 
   /**
-   * Sync a collection: Pull latest from Firebase and apply last-write-wins conflict resolution
-   * Called in background, doesn't block UI
-   * Skipped for guest users (local-only mode)
+   * Full sync: Push unsynced changes to Firebase, then pull and merge latest from Firebase
+   * Called on events: app startup, CRUD ops, network transitions (event-driven)
    */
-  private async syncCollectionInBackground(collection: CollectionName): Promise<void> {
+  async fullSync(collection: CollectionName): Promise<void> {
+    if (!this.isOnline) {
+      console.warn(`HybridRepository: Cannot sync ${collection}, device is offline`);
+      return;
+    }
+
+    if (!this.currentUid) {
+      console.warn(`HybridRepository: Cannot sync ${collection}, user uid not set yet`);
+      return;
+    }
+
     try {
-      // Skip if user action in progress (e.g., filling a form)
-      if (this.isUserActionInProgress) {
-        return;
+      console.log(`Starting event-driven full sync for ${collection}`);
+
+      // Phase 1: Push unsynced local documents to Firebase
+      const unsyncedDocs = await database.getUnsyncedDocuments(collection);
+
+      for (const doc of unsyncedDocs) {
+        try {
+          const data = JSON.parse(doc.data);
+
+          if (doc.operation === 'delete') {
+            await remoteRepository.deleteDocument(collection, doc.id);
+          } else {
+            // create or update
+            const existing = await remoteRepository.getDocument(collection, doc.id);
+            if (existing) {
+              await remoteRepository.updateDocument(collection, doc.id, data);
+            } else {
+              await remoteRepository.saveDocument(collection, doc.id, data);
+            }
+          }
+
+          // Mark as synced
+          await database.markDocumentSynced(collection, doc.id);
+        } catch (error) {
+          console.error(`HybridRepository: Failed to push document ${doc.id}:`, error);
+        }
       }
 
-      // Skip remote sync for guest users (local-only mode) - silent
-      if (this.isGuestUser) {
-        return;
-      }
-
-      // Debounce: Skip if this collection was synced recently
-      const lastSync = this.lastSyncTimes.get(collection) || 0;
-      const now = Date.now();
-      if (now - lastSync < this.SYNC_DEBOUNCE_MS) {
-        return; // Already synced recently, skip silently
-      }
-      this.lastSyncTimes.set(collection, now);
-
-      // Skip remote sync if uid not set yet
-      if (!this.currentUid) {
-        return;
-      }
-
+      // Phase 2: Pull and merge from Firebase (last-write-wins conflict resolution)
       console.log(`Syncing collection: ${collection}`);
 
       // Fetch all docs from Firebase
@@ -402,64 +438,6 @@ export class HybridRepository implements IRepository {
       await database.updateSyncMetadata(collection, {
         lastSyncTime: Date.now(),
       });
-
-      console.log(`Sync completed for ${collection}`);
-    } catch (error) {
-      console.error(`HybridRepository: Error syncing ${collection}:`, error);
-      // Update error in metadata
-      await database.updateSyncMetadata(collection, {
-        lastError: String(error),
-        lastErrorTime: Date.now(),
-      });
-    }
-  }
-
-  /**
-   * Full sync: Push unsynced changes to Firebase, then pull latest from Firebase
-   * Called when app goes online or periodically
-   */
-  async fullSync(collection: CollectionName): Promise<void> {
-    if (!this.isOnline) {
-      console.warn(`HybridRepository: Cannot sync ${collection}, device is offline`);
-      return;
-    }
-
-    if (!this.currentUid) {
-      console.warn(`HybridRepository: Cannot sync ${collection}, user uid not set yet`);
-      return;
-    }
-
-    try {
-      console.log(`Starting full sync for ${collection}`);
-
-      // Phase 1: Push unsynced local documents to Firebase
-      const unsyncedDocs = await database.getUnsyncedDocuments(collection);
-
-      for (const doc of unsyncedDocs) {
-        try {
-          const data = JSON.parse(doc.data);
-
-          if (doc.operation === 'delete') {
-            await remoteRepository.deleteDocument(collection, doc.id);
-          } else {
-            // create or update
-            const existing = await remoteRepository.getDocument(collection, doc.id);
-            if (existing) {
-              await remoteRepository.updateDocument(collection, doc.id, data);
-            } else {
-              await remoteRepository.saveDocument(collection, doc.id, data);
-            }
-          }
-
-          // Mark as synced
-          await database.markDocumentSynced(collection, doc.id);
-        } catch (error) {
-          console.error(`HybridRepository: Failed to push document ${doc.id}:`, error);
-        }
-      }
-
-      // Phase 2: Pull and merge from Firebase
-      await this.syncCollectionInBackground(collection);
 
       console.log(`Full sync completed for ${collection}`);
     } catch (error) {
@@ -557,4 +535,21 @@ export async function syncWithStrategy(strategy: SyncStrategy): Promise<void> {
  */
 export function setUserActionInProgress(inProgress: boolean): void {
   hybridRepository.setUserActionInProgress(inProgress);
+}
+
+/**
+ * Pause background sync for a specific collection
+ * Use this when user is editing documents in that collection
+ * Example: When QuotationModal opens, pause 'quotations' collection
+ */
+export function pauseCollectionSync(collection: string): void {
+  hybridRepository.pauseCollectionSync(collection);
+}
+
+/**
+ * Resume background sync for a specific collection
+ * Call this when user closes the edit modal
+ */
+export function resumeCollectionSync(collection: string): void {
+  hybridRepository.resumeCollectionSync(collection);
 }

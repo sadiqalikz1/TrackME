@@ -112,6 +112,7 @@ export const STORAGE_KEYS = {
   LAST_SYNC: '@trackme_last_sync',
   BIOMETRIC: '@trackme_biometric',
   DASHBOARD_CONFIG: '@trackme_dashboard_config',
+  SYNC_STRATEGY_CHOSEN: '@trackme_sync_strategy_chosen',
 };
 
 // Default Dashboard Configuration

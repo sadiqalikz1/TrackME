@@ -1,5 +1,6 @@
 {
   "expo": {
+    "owner": "sadiqalikz1",
     "name": "TrackME",
     "slug": "trackme",
     "version": "1.0.0",
@@ -33,7 +34,8 @@
         "android.permission.INTERNET",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
-        "android.permission.SCHEDULE_EXACT_ALARM"
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.RECORD_AUDIO"
       ],
       "googleServicesFile": "./google-services.json"
     },
@@ -76,7 +78,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "35b5dc0e-32ac-409e-b63e-8793acfeece2"
       }
     }
   }

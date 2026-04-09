@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
-import { Card, Button, QuotationModal, EmptyState } from '@/components/ui';
+import { Card, Button, EmptyState } from '@/components/ui';
 import { Quotation } from '@/types';
 import { quotationService } from '@/services/dataService';
 import { useData } from '@/hooks';
@@ -28,11 +28,9 @@ const QuotationsScreen: React.FC = () => {
   const navigation = useNavigation();
   const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
-  // Use hook for data fetching through service layer (not direct Firebase)
   const { data: quotationsData, loading, refetch } = useData('quotations');
 
   const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'pending' | 'accepted' | 'rejected' | 'expired'>('all');
 
   // Ensure quotations is an array
@@ -173,7 +171,7 @@ const QuotationsScreen: React.FC = () => {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>Quotations</Text>
-        <TouchableOpacity onPress={() => setModalVisible(true)}>
+        <TouchableOpacity onPress={() => (navigation as any).navigate('CreateQuotation')}>
           <Ionicons name="add-circle" size={24} color={colors.primary} />
         </TouchableOpacity>
       </View>
@@ -231,26 +229,6 @@ const QuotationsScreen: React.FC = () => {
             }
           />
         }
-      />
-
-      {/* Create Quotation Modal */}
-      <QuotationModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        onCreateQuotation={async (quotation) => {
-          try {
-            const quoteData = {
-              ...quotation,
-              uid: user!.uid,
-            };
-            await quotationService.create(quoteData);
-            showSuccess('Quotation created successfully!');
-            setModalVisible(false);
-            await refetch();
-          } catch (error) {
-            showError('Failed to create quotation');
-          }
-        }}
       />
     </View>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -181,44 +181,50 @@ const WorkDetailScreen: React.FC = () => {
     }
   };
 
-  const handleAddTimeEntry = async (entry: Omit<TimeEntry, 'id' | 'hoursWorked'>) => {
-    if (!work) return;
-    const newEntry: TimeEntry = {
-      ...entry,
-      id: Date.now().toString(),
-      hoursWorked: entry.duration / 60,
-    };
-    const timeEntries = [...(work.timeEntries || []), newEntry];
-    const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
+  const handleAddTimeEntry = useCallback(
+    async (entry: Omit<TimeEntry, 'id' | 'hoursWorked'>) => {
+      if (!work) return;
+      const newEntry: TimeEntry = {
+        ...entry,
+        id: Date.now().toString(),
+        hoursWorked: entry.duration / 60,
+      };
+      const timeEntries = [...(work.timeEntries || []), newEntry];
+      const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
 
-    try {
-      await workService.update(work.id, {
-        timeEntries,
-        totalHoursWorked: totalHours,
-      });
-      setWork({ ...work, timeEntries, totalHoursWorked: totalHours });
-      showSuccess('Time entry added');
-    } catch (error) {
-      showError('Failed to add time entry');
-    }
-  };
+      try {
+        await workService.update(work.id, {
+          timeEntries,
+          totalHoursWorked: totalHours,
+        });
+        setWork({ ...work, timeEntries, totalHoursWorked: totalHours });
+        showSuccess('Time entry added');
+      } catch (error) {
+        showError('Failed to add time entry');
+      }
+    },
+    [work, workService, showSuccess, showError]
+  );
 
-  const handleRemoveTimeEntry = async (entryId: string) => {
-    if (!work) return;
-    const timeEntries = work.timeEntries?.filter((t) => t.id !== entryId) || [];
-    const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
+  const handleRemoveTimeEntry = useCallback(
+    async (entryId: string) => {
+      if (!work) return;
+      const timeEntries = work.timeEntries?.filter((t) => t.id !== entryId) || [];
+      const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
 
-    try {
-      await workService.update(work.id, {
-        timeEntries,
-        totalHoursWorked: totalHours,
-      });
-      setWork({ ...work, timeEntries, totalHoursWorked: totalHours });
-      showSuccess('Time entry removed');
-    } catch (error) {
-      showError('Failed to remove time entry');
-    }
-  };
+      try {
+        await workService.update(work.id, {
+          timeEntries,
+          totalHoursWorked: totalHours,
+        });
+        setWork({ ...work, timeEntries, totalHoursWorked: totalHours });
+        showSuccess('Time entry removed');
+      } catch (error) {
+        showError('Failed to remove time entry');
+      }
+    },
+    [work, workService, showSuccess, showError]
+  );
 
   const handleAddExpense = async (expense: Omit<DetailedExpense, 'id'>) => {
     if (!work) return;

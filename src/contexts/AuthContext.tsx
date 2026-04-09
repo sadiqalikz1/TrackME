@@ -230,6 +230,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Execute the selected sync strategy
       await syncEngine.syncWithStrategy(strategy);
       
+      // Save that user has chosen sync strategy (don't ask again)
+      await AsyncStorage.setItem(STORAGE_KEYS.SYNC_STRATEGY_CHOSEN, 'true');
+      
       // Hide modal and complete login
       setShowSyncModal(false);
       setPendingLoginUser(null);
@@ -303,21 +306,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             
             // Show sync modal for returning users with local data
             // NEW SIGNUPS: Skip modal (no cloud data to compare)
-            // RETURNING USERS: Show modal if local data exists (let them choose how to merge)
+            // RETURNING USERS: Skip modal if already chosen strategy in the past
+            // RETURNING USERS: Show modal if local data exists and haven't chosen strategy yet
             if (!isNewSignup && hasLocal) {
-              console.log('Returning user with local data - showing sync strategy modal');
+              // Check if user already chose sync strategy before
+              const alreadyChosen = await AsyncStorage.getItem(STORAGE_KEYS.SYNC_STRATEGY_CHOSEN);
               
-              // Get local data count for display
-              const count = await database.getLocalDataCount('transactions') +
-                           await database.getLocalDataCount('budgets') +
-                           await database.getLocalDataCount('work');
-              
-              setLocalDataCount(count);
-              setCloudDataExists(hasCloud);
-              setPendingLoginUser({ fbUser, userData });
-              setShowSyncModal(true);
-              setIsLoading(false); // Allow UI to render modal
-              return; // Wait for user to select sync strategy
+              if (!alreadyChosen) {
+                console.log('Returning user with local data - showing sync strategy modal');
+                
+                // Get local data count for display
+                const count = await database.getLocalDataCount('transactions') +
+                             await database.getLocalDataCount('budgets') +
+                             await database.getLocalDataCount('work');
+                
+                setLocalDataCount(count);
+                setCloudDataExists(hasCloud);
+                setPendingLoginUser({ fbUser, userData });
+                setShowSyncModal(true);
+                setIsLoading(false); // Allow UI to render modal
+                return; // Wait for user to select sync strategy
+              } else {
+                console.log('Returning user - previously chose sync strategy, skipping modal');
+              }
             }
             
             // No sync modal needed - complete login immediately
@@ -408,6 +419,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('Signing out user...');
       // Clear cache FIRST so onAuthChange doesn't reload the old user
       await cacheUser(null);
+      // Clear sync strategy flag so next login can ask again if needed
+      await AsyncStorage.removeItem(STORAGE_KEYS.SYNC_STRATEGY_CHOSEN);
       await firebaseSignOut();
       setUser(null);
       setFirebaseUser(null);

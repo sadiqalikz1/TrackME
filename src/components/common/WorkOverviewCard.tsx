@@ -41,7 +41,7 @@ const WorkOverviewCard: React.FC<WorkOverviewCardProps> = ({ works, customColor,
       case 'in-progress':
         return 'hourglass';
       case 'pending':
-        return 'clock';
+        return 'time-outline';
       case 'cancelled':
         return 'close-circle';
       default:

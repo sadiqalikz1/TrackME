@@ -27,6 +27,7 @@ import BankAccountsScreen from '@/screens/more/BankAccountsScreen';
 import BudgetsScreen from '@/screens/budgets/BudgetsScreen';
 import GoalsScreen from '@/screens/goals/GoalsScreen';
 import QuotationsScreen from '@/screens/quotations/QuotationsScreen';
+import CreateQuotationScreen from '@/screens/quotations/CreateQuotationScreen';
 import QuotationDetailScreen from '@/screens/quotations/QuotationDetailScreen';
 import AnalysisScreen from '@/screens/analysis/AnalysisScreen';
 import SettingsScreen from '@/screens/settings/SettingsScreen';
@@ -72,6 +73,7 @@ const MoreStackNavigator = () => {
       <MoreStack.Screen name="Goals" component={GoalsScreen} />
       <MoreStack.Screen name="BankAccounts" component={BankAccountsScreen} />
       <MoreStack.Screen name="Quotations" component={QuotationsScreen} />
+      <MoreStack.Screen name="CreateQuotation" component={CreateQuotationScreen} />
       <MoreStack.Screen name="QuotationDetail" component={QuotationDetailScreen} />
       <MoreStack.Screen name="Analysis" component={AnalysisScreen} />
       <MoreStack.Screen name="Settings" component={SettingsScreen} />

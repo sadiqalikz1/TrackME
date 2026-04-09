@@ -3,27 +3,20 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   TextInput,
   Alert,
-  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme, useAuth } from '@/contexts';
-import { Modal } from './Modal';
-import { Button } from './Button';
-import { Card } from './Card';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme, useAuth, useNotification } from '@/contexts';
+import { Card, Button } from '@/components/ui';
 import { Quotation } from '@/types';
-import { formatCurrency, formatDate } from '@/utils/formatters';
+import { quotationService } from '@/services/dataService';
 import { CURRENCIES } from '@/utils/constants';
-import { setUserActionInProgress, pauseCollectionSync, resumeCollectionSync } from '@/services/repositories/hybridRepository';
-
-interface QuotationModalProps {
-  visible: boolean;
-  onClose: () => void;
-  onCreateQuotation: (quotation: Omit<Quotation, 'id' | 'uid' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-}
+import { formatCurrency } from '@/utils/formatters';
 
 interface QuoteItem {
   name: string;
@@ -31,15 +24,14 @@ interface QuoteItem {
   unitPrice: number;
 }
 
-export const QuotationModalComponent: React.FC<QuotationModalProps> = ({
-  visible,
-  onClose,
-  onCreateQuotation,
-}) => {
+const CreateQuotationScreen: React.FC = () => {
   const { colors } = useTheme();
   const { user } = useAuth();
+  const { showSuccess, showError } = useNotification();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
-  
+
   // Quotation fields
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -59,16 +51,6 @@ export const QuotationModalComponent: React.FC<QuotationModalProps> = ({
   const [creating, setCreating] = useState(false);
   const [expandItems, setExpandItems] = useState(true);
 
-  // Pause background sync while user is filling the form
-  useEffect(() => {
-    if (visible) {
-      pauseCollectionSync('quotations');
-    }
-    return () => {
-      resumeCollectionSync('quotations');
-    };
-  }, [visible]);
-
   // Memoize calculations to prevent unnecessary re-renders
   const { subtotal, taxAmount, discountAmount, total } = useMemo(() => {
     const sub = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -78,7 +60,7 @@ export const QuotationModalComponent: React.FC<QuotationModalProps> = ({
     return { subtotal: sub, taxAmount: taxAmt, discountAmount: discountAmt, total: tot };
   }, [items, tax, discount]);
 
-  // Memoize handlers to prevent unnecessary re-renders of child components
+  // Memoize handlers to prevent unnecessary re-renders
   const handleAddItem = useCallback(() => {
     const price = parseFloat(itemUnitPrice) || 0;
     const qty = parseFloat(itemQuantity) || 1;
@@ -123,7 +105,8 @@ export const QuotationModalComponent: React.FC<QuotationModalProps> = ({
       validUntil.setDate(validUntil.getDate() + parseInt(validDays || '30'));
 
       const quoteDescription = description.trim();
-      await onCreateQuotation({
+      await quotationService.create({
+        uid: user!.uid,
         clientName: clientName.trim(),
         clientEmail: clientEmail.trim() || '',
         clientPhone: clientPhone.trim() || '',
@@ -140,13 +123,15 @@ export const QuotationModalComponent: React.FC<QuotationModalProps> = ({
         status: 'pending',
       });
 
-      Alert.alert('Success', 'Quotation created successfully!');
+      showSuccess('Quotation created successfully!');
       resetForm();
-      onClose();
+      navigation.goBack();
+    } catch (error) {
+      showError('Failed to create quotation');
     } finally {
       setCreating(false);
     }
-  }, [clientName, clientEmail, clientPhone, description, validDays, items, subtotal, taxAmount, discountAmount, total, onCreateQuotation, onClose]);
+  }, [clientName, clientEmail, clientPhone, description, validDays, items, subtotal, taxAmount, discountAmount, total, user, navigation, showSuccess, showError]);
 
   const resetForm = useCallback(() => {
     setClientName('');
@@ -163,8 +148,17 @@ export const QuotationModalComponent: React.FC<QuotationModalProps> = ({
   }, []);
 
   return (
-    <Modal visible={visible} title="Create Quotation" onClose={onClose}>
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: colors.primary, paddingTop: insets.top }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={28} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Create Quotation</Text>
+        <View style={{ width: 28 }} />
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
         {/* Client Info */}
         <Card style={{ marginBottom: 12, padding: 12 }}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Client Information</Text>
@@ -388,16 +382,34 @@ export const QuotationModalComponent: React.FC<QuotationModalProps> = ({
           style={{ marginBottom: 20 }}
         />
       </ScrollView>
-    </Modal>
+    </View>
   );
 };
 
-// ✅ Memoize component to prevent re-renders from parent prop changes
-export const QuotationModal = React.memo(QuotationModalComponent) as typeof QuotationModalComponent;
-
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: 20,
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  content: {
+    flex: 1,
+    padding: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -405,17 +417,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  section: {
-    marginBottom: 12,
-  },
   label: {
     fontSize: 12,
     fontWeight: '500',
     marginBottom: 6,
+  },
+  section: {
+    marginBottom: 12,
   },
   input: {
     borderWidth: 1,
@@ -441,41 +449,41 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   thirdInput: {
-    flex: 0.35,
+    flex: 1,
   },
   twoThirdInput: {
-    flex: 0.65,
+    flex: 2,
   },
   inputBox: {
+    borderWidth: 1,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    height: 44,
-  },
-  smallInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    fontSize: 13,
-    height: 36,
+    minHeight: 42,
   },
   currency: {
+    paddingHorizontal: 10,
     fontSize: 14,
-    fontWeight: '600',
-    marginRight: 4,
+    fontWeight: '500',
+  },
+  smallInput: {
+    fontSize: 14,
+    paddingHorizontal: 4,
+    flex: 1,
   },
   itemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderRadius: 6,
     marginBottom: 4,
+  },
+  itemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   itemInfo: {
     flex: 1,
@@ -488,10 +496,6 @@ const styles = StyleSheet.create({
   itemDetails: {
     fontSize: 11,
   },
-  itemRight: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
   itemTotal: {
     fontSize: 13,
     fontWeight: '600',
@@ -500,24 +504,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  calcLabel: {
-    fontSize: 12,
-  },
-  calcValue: {
-    fontSize: 13,
-    fontWeight: '600',
+    marginBottom: 10,
   },
   calcInput: {
     flex: 1,
+    marginRight: 8,
+  },
+  calcLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  calcValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 100,
+    textAlign: 'right',
   },
   totalLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   totalValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });
+
+export default CreateQuotationScreen;
