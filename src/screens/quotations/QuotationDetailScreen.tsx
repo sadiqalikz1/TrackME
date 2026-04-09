@@ -13,7 +13,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Button, Input, Modal } from '@/components/ui';
 import { Quotation } from '@/types';
-import { getQuotationById } from '@/services/firebase';
 import { quotationService } from '@/services/dataService';
 import { COLLECTIONS, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -40,6 +39,14 @@ const QuotationDetailScreen: React.FC = () => {
   const [editedItemName, setEditedItemName] = useState('');
   const [editedItemPrice, setEditedItemPrice] = useState('');
   const [editedItemQty, setEditedItemQty] = useState('');
+  const [addItemModalVisible, setAddItemModalVisible] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemPrice, setNewItemPrice] = useState('');
+  const [newItemQty, setNewItemQty] = useState('1');
+  const [editClientModalVisible, setEditClientModalVisible] = useState(false);
+  const [editedClientName, setEditedClientName] = useState('');
+  const [editedClientEmail, setEditedClientEmail] = useState('');
+  const [editedClientPhone, setEditedClientPhone] = useState('');
 
   const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
@@ -49,7 +56,7 @@ const QuotationDetailScreen: React.FC = () => {
 
   const loadQuotation = async () => {
     try {
-      const q = await getQuotationById(quotationId);
+      const q = await quotationService.getById(quotationId);
       if (q) {
         setQuotation(q);
         setEditStatus(q.status);
@@ -146,6 +153,119 @@ const QuotationDetailScreen: React.FC = () => {
       showSuccess('Item updated');
     } catch (error) {
       showError('Failed to update item');
+    }
+  };
+
+  const handleDeleteItem = async (index: number) => {
+    if (!quotation) return;
+    
+    Alert.alert('Delete Item', 'Remove this item from the quotation?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const updatedItems = quotation.items.filter((_, idx) => idx !== index);
+            const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+            const updatedQuotation = {
+              ...quotation,
+              items: updatedItems,
+              subtotal,
+              total: subtotal + quotation.tax - quotation.discount,
+            };
+
+            await quotationService.update(quotation.id, {
+              items: updatedItems,
+              subtotal,
+              total: updatedQuotation.total,
+            });
+
+            setQuotation(updatedQuotation);
+            showSuccess('Item deleted');
+          } catch (error) {
+            showError('Failed to delete item');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleAddItem = async () => {
+    if (!quotation || !newItemName.trim() || !newItemPrice) {
+      Alert.alert('Invalid Input', 'Please fill in all fields');
+      return;
+    }
+
+    try {
+      const quantity = parseFloat(newItemQty) || 1;
+      const unitPrice = parseFloat(newItemPrice);
+      const newItem = {
+        name: newItemName.trim(),
+        quantity,
+        unitPrice,
+        total: quantity * unitPrice,
+      };
+
+      const updatedItems = [...quotation.items, newItem];
+      const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+      const updatedQuotation = {
+        ...quotation,
+        items: updatedItems,
+        subtotal,
+        total: subtotal + quotation.tax - quotation.discount,
+      };
+
+      await quotationService.update(quotation.id, {
+        items: updatedItems,
+        subtotal,
+        total: updatedQuotation.total,
+      });
+
+      setQuotation(updatedQuotation);
+      setNewItemName('');
+      setNewItemPrice('');
+      setNewItemQty('1');
+      setAddItemModalVisible(false);
+      showSuccess('Item added');
+    } catch (error) {
+      showError('Failed to add item');
+    }
+  };
+
+  const handleOpenClientEdit = () => {
+    if (!quotation) return;
+    setEditedClientName(quotation.clientName);
+    setEditedClientEmail(quotation.clientEmail || '');
+    setEditedClientPhone(quotation.clientPhone || '');
+    setEditClientModalVisible(true);
+  };
+
+  const handleSaveClientInfo = async () => {
+    if (!quotation || !editedClientName.trim()) {
+      Alert.alert('Invalid Input', 'Please fill in the client name');
+      return;
+    }
+
+    try {
+      const updatedQuotation = {
+        ...quotation,
+        clientName: editedClientName.trim(),
+        clientEmail: editedClientEmail.trim(),
+        clientPhone: editedClientPhone.trim(),
+      };
+
+      await quotationService.update(quotation.id, {
+        clientName: editedClientName.trim(),
+        clientEmail: editedClientEmail.trim(),
+        clientPhone: editedClientPhone.trim(),
+      });
+
+      setQuotation(updatedQuotation);
+      setEditClientModalVisible(false);
+      showSuccess('Client information updated');
+    } catch (error) {
+      showError('Failed to update client information');
     }
   };
 
@@ -352,7 +472,12 @@ const QuotationDetailScreen: React.FC = () => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Client Info */}
         <Card style={styles.card}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Client Information</Text>
+          <View style={styles.headerRow}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Client Information</Text>
+            <TouchableOpacity onPress={handleOpenClientEdit}>
+              <Ionicons name="pencil" size={18} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
           <View style={styles.infoRow}>
             <Text style={[styles.label, { color: colors.textMuted }]}>Name</Text>
             <Text style={[styles.value, { color: colors.text }]}>{quotation.clientName}</Text>
@@ -402,27 +527,42 @@ const QuotationDetailScreen: React.FC = () => {
 
         {/* Items */}
         <Card style={styles.card}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Items ({quotation.items.length})</Text>
-          {quotation.items.map((item, index) => (
-            <TouchableOpacity 
-              key={index} 
-              style={[styles.itemRow, { borderBottomColor: colors.border }]}
-              onPress={() => handleEditItem(index)}
-            >
-              <View style={styles.itemInfo}>
-                <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
-                <Text style={[styles.itemDetails, { color: colors.textMuted }]}>
-                  {item.quantity} × {currencyInfo.symbol}{item.unitPrice.toFixed(2)}
-                </Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.itemTotal, { color: colors.primary }]}>
-                  {currencyInfo.symbol}{item.total.toFixed(2)}
-                </Text>
-                <Ionicons name="pencil" size={14} color={colors.textMuted} />
-              </View>
+          <View style={styles.headerRow}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Items ({quotation.items.length})</Text>
+            <TouchableOpacity onPress={() => setAddItemModalVisible(true)}>
+              <Ionicons name="add-circle" size={20} color={colors.primary} />
             </TouchableOpacity>
-          ))}
+          </View>
+          {quotation.items.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>No items added yet</Text>
+          ) : (
+            quotation.items.map((item, index) => (
+              <View key={index} style={[styles.itemRow, { borderBottomColor: colors.border }]}>
+                <TouchableOpacity 
+                  style={{ flex: 1 }}
+                  onPress={() => handleEditItem(index)}
+                >
+                  <View style={styles.itemInfo}>
+                    <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
+                    <Text style={[styles.itemDetails, { color: colors.textMuted }]}>
+                      {item.quantity} × {currencyInfo.symbol}{item.unitPrice.toFixed(2)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                  <Text style={[styles.itemTotal, { color: colors.primary }]}>
+                    {currencyInfo.symbol}{item.total.toFixed(2)}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <Ionicons name="pencil" size={14} color={colors.textMuted} />
+                    <TouchableOpacity onPress={() => handleDeleteItem(index)}>
+                      <Ionicons name="trash" size={14} color={colors.danger} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
         </Card>
 
         {/* Summary */}
@@ -542,7 +682,94 @@ const QuotationDetailScreen: React.FC = () => {
             />
           </View>
 
-          <Button title="Save Changes" onPress={handleSaveItemChanges} style={{ marginTop: 12 }} />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button 
+              title="Delete Item" 
+              variant="secondary" 
+              onPress={() => {
+                setEditItemModalVisible(false);
+                selectedItemIndex !== null && handleDeleteItem(selectedItemIndex);
+              }}
+              style={{ flex: 1 }}
+            />
+            <Button 
+              title="Save Changes" 
+              onPress={handleSaveItemChanges}
+              style={{ flex: 1, marginTop: 0 }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Item Modal */}
+      <Modal visible={addItemModalVisible} title="Add New Item" onClose={() => setAddItemModalVisible(false)}>
+        <View style={styles.modalContent}>
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Item Name</Text>
+            <Input
+              placeholder="Item name"
+              value={newItemName}
+              onChangeText={setNewItemName}
+            />
+          </View>
+
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Unit Price</Text>
+            <Input
+              placeholder="0.00"
+              value={newItemPrice}
+              onChangeText={setNewItemPrice}
+              keyboardType="decimal-pad"
+            />
+          </View>
+
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Quantity</Text>
+            <Input
+              placeholder="1"
+              value={newItemQty}
+              onChangeText={setNewItemQty}
+              keyboardType="decimal-pad"
+            />
+          </View>
+
+          <Button title="Add Item" onPress={handleAddItem} style={{ marginTop: 12 }} />
+        </View>
+      </Modal>
+
+      {/* Edit Client Info Modal */}
+      <Modal visible={editClientModalVisible} title="Edit Client Information" onClose={() => setEditClientModalVisible(false)}>
+        <View style={styles.modalContent}>
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Client Name *</Text>
+            <Input
+              placeholder="Client name"
+              value={editedClientName}
+              onChangeText={setEditedClientName}
+            />
+          </View>
+
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Email</Text>
+            <Input
+              placeholder="client@email.com"
+              value={editedClientEmail}
+              onChangeText={setEditedClientEmail}
+              keyboardType="email-address"
+            />
+          </View>
+
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.textMuted, marginBottom: 8 }]}>Phone</Text>
+            <Input
+              placeholder="Phone number"
+              value={editedClientPhone}
+              onChangeText={setEditedClientPhone}
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          <Button title="Save Changes" onPress={handleSaveClientInfo} style={{ marginTop: 12 }} />
         </View>
       </Modal>
     </View>
@@ -633,6 +860,11 @@ const styles = StyleSheet.create({
   itemTotal: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  emptyText: {
+    fontSize: 12,
+    textAlign: 'center',
+    paddingVertical: 12,
   },
   summaryRow: {
     flexDirection: 'row',

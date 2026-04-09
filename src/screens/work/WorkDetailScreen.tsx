@@ -27,7 +27,6 @@ import {
   AdditionalWorkModal,
 } from '@/components/ui';
 import { Work, Transaction, TransactionCategory, DetailedExpense, TimeEntry, WorkPayment, AdditionalWork } from '@/types';
-import { getWorkById } from '@/services/firebase';
 import { workService, transactionService } from '@/services/dataService';
 import { WORK_CATEGORIES, STATUS_COLORS, COLLECTIONS, EXPENSE_TYPES } from '@/utils/constants';
 import { formatCurrency, formatDate, formatPercentage, calculateProfit } from '@/utils/formatters';
@@ -60,7 +59,7 @@ const WorkDetailScreen: React.FC = () => {
 
   const loadWork = async () => {
     try {
-      const data = await getWorkById(workId);
+      const data = await workService.getById(workId);
       setWork(data);
     } catch (error) {
       showError('Failed to load project');
