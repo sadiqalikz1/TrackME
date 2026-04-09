@@ -1,6 +1,5 @@
 {
   "expo": {
-
     "name": "TrackME",
     "slug": "trackme",
     "version": "1.0.0",
@@ -66,7 +65,8 @@
           "cameraPermission": "Allow TrackME to access your camera to take photos for work projects."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true

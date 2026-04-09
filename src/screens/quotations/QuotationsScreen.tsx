@@ -15,7 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Button, QuotationModal, EmptyState } from '@/components/ui';
 import { Quotation } from '@/types';
-import { deleteDocument, createDocument, subscribeToCollection } from '@/services/firebase';
+import { quotationService } from '@/services/dataService';
+import { useData } from '@/hooks';
 import { COLLECTIONS, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
@@ -27,36 +28,19 @@ const QuotationsScreen: React.FC = () => {
   const navigation = useNavigation();
   const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
-  const [quotations, setQuotations] = useState<Quotation[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use hook for data fetching through service layer (not direct Firebase)
+  const { data: quotationsData, loading, refetch } = useData('quotations');
+
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'pending' | 'accepted' | 'rejected' | 'expired'>('all');
 
-  useEffect(() => {
-    loadQuotations();
-  }, [user]);
-
-  const loadQuotations = async () => {
-    try {
-      if (!user) return;
-      subscribeToCollection<Quotation>(
-        COLLECTIONS.QUOTATIONS,
-        user.uid,
-        (data) => {
-          setQuotations(data);
-          setLoading(false);
-        }
-      );
-    } catch (error) {
-      showError('Failed to load quotations');
-      setLoading(false);
-    }
-  };
+  // Ensure quotations is an array
+  const quotations = Array.isArray(quotationsData) ? quotationsData : [];
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadQuotations();
+    await refetch();
     setRefreshing(false);
   };
 
@@ -68,8 +52,8 @@ const QuotationsScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(COLLECTIONS.QUOTATIONS, id);
-            setQuotations(quotations.filter(q => q.id !== id));
+            await quotationService.delete(id);
+            await refetch();
             showSuccess('Quotation deleted');
           } catch (error) {
             showError('Failed to delete quotation');
@@ -194,8 +178,14 @@ const QuotationsScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      {/* Quotations List - FlatList as main scrolling container */}
+      <FlatList
         style={styles.content}
+        data={filteredQuotations}
+        renderItem={renderQuotationItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -203,46 +193,35 @@ const QuotationsScreen: React.FC = () => {
             tintColor={colors.primary}
           />
         }
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Status Filter */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScroll}
-        >
-          {(['all', 'pending', 'accepted', 'rejected', 'expired'] as const).map((status) => (
-            <TouchableOpacity
-              key={status}
-              style={[
-                styles.filterButton,
-                {
-                  backgroundColor: selectedStatus === status ? colors.primary : colors.card,
-                  borderColor: colors.border,
-                }
-              ]}
-              onPress={() => setSelectedStatus(status)}
-            >
-              <Text style={[
-                styles.filterText,
-                { color: selectedStatus === status ? '#fff' : colors.text }
-              ]}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Quotations List */}
-        {filteredQuotations.length > 0 ? (
-          <FlatList
-            data={filteredQuotations}
-            renderItem={renderQuotationItem}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            contentContainerStyle={styles.listContent}
-          />
-        ) : (
+        ListHeaderComponent={
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+          >
+            {(['all', 'pending', 'accepted', 'rejected', 'expired'] as const).map((status) => (
+              <TouchableOpacity
+                key={status}
+                style={[
+                  styles.filterButton,
+                  {
+                    backgroundColor: selectedStatus === status ? colors.primary : colors.card,
+                    borderColor: colors.border,
+                  }
+                ]}
+                onPress={() => setSelectedStatus(status)}
+              >
+                <Text style={[
+                  styles.filterText,
+                  { color: selectedStatus === status ? '#fff' : colors.text }
+                ]}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        }
+        ListEmptyComponent={
           <EmptyState 
             icon="document-text"
             title="No Quotations"
@@ -251,8 +230,8 @@ const QuotationsScreen: React.FC = () => {
               : `No ${selectedStatus} quotations`
             }
           />
-        )}
-      </ScrollView>
+        }
+      />
 
       {/* Create Quotation Modal */}
       <QuotationModal
@@ -264,10 +243,10 @@ const QuotationsScreen: React.FC = () => {
               ...quotation,
               uid: user!.uid,
             };
-            await createDocument(COLLECTIONS.QUOTATIONS, quoteData);
+            await quotationService.create(quoteData);
             showSuccess('Quotation created successfully!');
             setModalVisible(false);
-            await loadQuotations();
+            await refetch();
           } catch (error) {
             showError('Failed to create quotation');
           }

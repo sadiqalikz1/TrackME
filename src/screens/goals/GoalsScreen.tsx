@@ -13,9 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
+import { useData, useDataMutations, useOfflineStatus } from '@/hooks';
 import { Card, Modal, Button, Input, ProgressBar, EmptyState } from '@/components/ui';
 import { Goal } from '@/types';
-import { getUserGoals, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
 import { COLLECTIONS, GOAL_COLORS } from '@/utils/constants';
 import { formatCurrency, formatDate, parseCurrencyInput, formatPercentage, calculateDaysRemaining } from '@/utils/formatters';
 
@@ -25,10 +25,11 @@ const GoalsScreen: React.FC = () => {
   const { showSuccess, showError } = useNotification();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { isOffline } = useOfflineStatus();
 
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data: goalsData, loading, refetch } = useData<Goal[]>('goals');
+  const goals = goalsData && Array.isArray(goalsData) ? goalsData : [];
+  const { create: createGoal, update: updateGoal, delete: deleteGoal } = useDataMutations('goals');
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -42,23 +43,17 @@ const GoalsScreen: React.FC = () => {
   const [selectedColor, setSelectedColor] = useState(GOAL_COLORS[0]);
   const [addAmount, setAddAmount] = useState('');
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const currency = user?.currency || 'USD';
 
-  useEffect(() => {
-    if (!user) return;
-
-    const unsub = getUserGoals(user.uid, (data) => {
-      setGoals(data);
-      setLoading(false);
-    });
-
-    return unsub;
-  }, [user]);
-
   const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const openAddModal = () => {
@@ -114,14 +109,15 @@ const GoalsScreen: React.FC = () => {
       };
 
       if (editingGoal) {
-        await updateDocument(COLLECTIONS.GOALS, editingGoal.id, goalData);
+        await updateGoal(editingGoal.id, goalData);
         showSuccess('Goal updated');
       } else {
-        await createDocument<Goal>(COLLECTIONS.GOALS, goalData);
+        await createGoal(goalData);
         showSuccess('Goal created');
       }
 
       setModalVisible(false);
+      await refetch();
     } catch (error) {
       showError('Failed to save goal');
     } finally {
@@ -141,7 +137,7 @@ const GoalsScreen: React.FC = () => {
     setSaving(true);
     try {
       const newSaved = selectedGoal.saved + amount;
-      await updateDocument(COLLECTIONS.GOALS, selectedGoal.id, {
+      await updateGoal(selectedGoal.id, {
         saved: newSaved,
         isCompleted: newSaved >= selectedGoal.target,
       });
@@ -162,8 +158,9 @@ const GoalsScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(COLLECTIONS.GOALS, goal.id);
+            await deleteGoal(goal.id);
             showSuccess('Goal deleted');
+            await refetch();
           } catch (error) {
             showError('Failed to delete goal');
           }
@@ -174,7 +171,7 @@ const GoalsScreen: React.FC = () => {
 
   const markAsComplete = async (goal: Goal) => {
     try {
-      await updateDocument(COLLECTIONS.GOALS, goal.id, {
+      await updateGoal(goal.id, {
         saved: goal.target,
         isCompleted: true,
       });
@@ -260,9 +257,21 @@ const GoalsScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Offline Banner */}
+      {isOffline && (
+        <View style={[styles.offlineBanner, { backgroundColor: colors.warning }]}>
+          <Ionicons name="cloud-offline" size={16} color="#fff" />
+          <Text style={styles.offlineText}>Offline - Data from cache</Text>
+        </View>
+      )}
+
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => {
+          if (navigation.canGoBack?.()) {
+            navigation.goBack();
+          }
+        }}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>Savings Goals</Text>

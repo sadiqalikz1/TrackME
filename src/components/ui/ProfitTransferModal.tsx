@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts';
@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { DEFAULT_BANKS } from '@/utils/constants';
 import { TransactionCategory } from '@/types';
+import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
 
 interface ProfitTransferModalProps {
   visible: boolean;
@@ -30,6 +31,16 @@ export const ProfitTransferModal: React.FC<ProfitTransferModalProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategory>('work_profit');
   const [selectedBank, setSelectedBank] = useState(DEFAULT_BANKS[0].name);
   const [isTransferring, setIsTransferring] = useState(false);
+
+  // Pause background sync while user is filling the form
+  useEffect(() => {
+    if (visible) {
+      setUserActionInProgress(true);
+    }
+    return () => {
+      setUserActionInProgress(false);
+    };
+  }, [visible]);
 
   const incomeCategories: Array<{ category: TransactionCategory; label: string; icon: string }> = [
     { category: 'work_profit', label: 'Work Profit', icon: 'briefcase' },
@@ -109,12 +120,10 @@ export const ProfitTransferModal: React.FC<ProfitTransferModalProps> = ({
         {/* Income Category Selection */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: colors.text }]}>Income Source</Text>
-          <FlatList
-            data={incomeCategories}
-            keyExtractor={(item) => item.category}
-            scrollEnabled={false}
-            renderItem={({ item }) => (
+          <View>
+            {incomeCategories.map((item) => (
               <TouchableOpacity
+                key={item.category}
                 style={[
                   styles.categoryItem,
                   {
@@ -149,8 +158,8 @@ export const ProfitTransferModal: React.FC<ProfitTransferModalProps> = ({
                   />
                 )}
               </TouchableOpacity>
-            )}
-          />
+            ))}
+          </View>
         </View>
 
         {/* Bank Account Selection */}
@@ -158,12 +167,10 @@ export const ProfitTransferModal: React.FC<ProfitTransferModalProps> = ({
           <Text style={[styles.label, { color: colors.text }]}>Transfer To</Text>
           <View style={[styles.bankPicker, { borderColor: colors.border }]}>
             <Ionicons name="card" size={20} color={colors.primary} />
-            <FlatList
-              data={DEFAULT_BANKS}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              renderItem={({ item }) => (
+            <View>
+              {DEFAULT_BANKS.map((item) => (
                 <TouchableOpacity
+                  key={item.id}
                   style={[
                     styles.bankOption,
                     {
@@ -198,8 +205,8 @@ export const ProfitTransferModal: React.FC<ProfitTransferModalProps> = ({
                     />
                   )}
                 </TouchableOpacity>
-              )}
-            />
+              ))}
+            </View>
           </View>
         </View>
 

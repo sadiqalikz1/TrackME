@@ -16,12 +16,11 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Modal, Button } from '@/components/ui';
 import { Currency } from '@/types';
-import { updateUserDocument } from '@/services/firebase';
 import { CURRENCIES } from '@/utils/constants';
 
 const SettingsScreen: React.FC = () => {
   const { colors, isDark, toggleTheme } = useTheme();
-  const { user, signOut: authSignOut } = useAuth();
+  const { user, signOut: authSignOut, updateUser } = useAuth();
   const { showSuccess, showError } = useNotification();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -39,7 +38,7 @@ const SettingsScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      await updateUserDocument(user.uid, { currency });
+      await updateUser({ currency });
       showSuccess(`Currency changed to ${currency}`);
       setCurrencyModalVisible(false);
     } catch (error) {
@@ -348,12 +347,10 @@ const SettingsScreen: React.FC = () => {
         onClose={() => setCurrencyModalVisible(false)}
         title="Select Currency"
       >
-        <FlatList
-          data={CURRENCIES}
-          keyExtractor={(item) => item.code}
-          style={{ maxHeight: 400 }}
-          renderItem={({ item }) => (
+        <View>
+          {CURRENCIES.map((item) => (
             <TouchableOpacity
+              key={item.code}
               style={[
                 styles.currencyItem,
                 {
@@ -373,8 +370,8 @@ const SettingsScreen: React.FC = () => {
                 <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
               )}
             </TouchableOpacity>
-          )}
-        />
+          ))}
+        </View>
       </Modal>
     </View>
   );

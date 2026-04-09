@@ -13,9 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { LineChart, PieChart, BarChart } from 'react-native-chart-kit';
 import { useTheme, useAuth } from '@/contexts';
+import { useData, useOfflineStatus } from '@/hooks';
 import { Card, Skeleton } from '@/components/ui';
 import { Transaction, TransactionCategory } from '@/types';
-import { getUserTransactions } from '@/services/firebase';
 import { TRANSACTION_CATEGORIES } from '@/utils/constants';
 import { formatCurrency, formatPercentage, getMonthName } from '@/utils/formatters';
 
@@ -27,31 +27,21 @@ type TimeRange = '1M' | '3M' | '6M' | '1Y';
 const AnalysisScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
+  const { isOffline } = useOfflineStatus();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data: transactionsData, loading, refetch } = useData<Transaction[]>('transactions');
+  const transactions = transactionsData && Array.isArray(transactionsData) ? transactionsData : [];
   const [timeRange, setTimeRange] = useState<TimeRange>('6M');
 
   const currency = user?.currency || 'USD';
 
-  useEffect(() => {
-    if (!user) return;
-
-    const unsub = getUserTransactions(user.uid, (data) => {
-      setTransactions(data);
-      setLoading(false);
-    });
-
-    return unsub;
-  }, [user]);
-
   const onRefresh = async () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await refetch();
   };
+
+
 
   // Filter by time range
   const filteredTransactions = useMemo(() => {
@@ -205,6 +195,14 @@ const AnalysisScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Offline Banner */}
+      {isOffline && (
+        <View style={[styles.offlineBanner, { backgroundColor: colors.warning }]}>
+          <Ionicons name="cloud-offline" size={16} color="#fff" />
+          <Text style={styles.offlineText}>Offline - Data from cache</Text>
+        </View>
+      )}
+
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -218,7 +216,7 @@ const AnalysisScreen: React.FC = () => {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
         {/* Time Range Selector */}
@@ -416,6 +414,19 @@ const AnalysisScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  offlineText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',

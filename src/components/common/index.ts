@@ -1,3 +1,11 @@
 export { TransactionItem } from './TransactionItem';
 export { WorkCard } from './WorkCard';
 export { GoalCard } from './GoalCard';
+export { default as IncomeExpenseCard } from './IncomeExpenseCard';
+export { default as BudgetStatusCard } from './BudgetStatusCard';
+export { default as WorkOverviewCard } from './WorkOverviewCard';
+export { default as NetWorthCard } from './NetWorthCard';
+export { default as SpendingTrendsCard } from './SpendingTrendsCard';
+export { default as TopCategoriesCard } from './TopCategoriesCard';
+export { default as UpcomingBillsCard } from './UpcomingBillsCard';
+export { default as EnhancedGoalProgressCard } from './EnhancedGoalProgressCard';

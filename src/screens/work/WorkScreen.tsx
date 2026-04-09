@@ -16,7 +16,8 @@ import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Input, Modal, Button, EmptyState } from '@/components/ui';
 import { WorkCard } from '@/components/common';
 import { Work, WorkCategory, WorkStatus } from '@/types';
-import { getUserWorks, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
+import { workService } from '@/services/dataService';
+import { useData } from '@/hooks';
 import { COLLECTIONS, WORK_CATEGORIES, STATUS_COLORS, PROGRESS_STEPS } from '@/utils/constants';
 import { parseCurrencyInput, isValidAmount, calculateProfit, formatCurrency } from '@/utils/formatters';
 
@@ -27,10 +28,14 @@ const WorkScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
 
-  const [works, setWorks] = useState<Work[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use hook for data fetching through service layer (not direct Firebase)
+  const { data: worksData, loading, refetch } = useData('work');
+
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<WorkStatus | 'all'>('all');
+
+  // Ensure works is an array
+  const works = Array.isArray(worksData) ? worksData : [];
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -46,17 +51,6 @@ const WorkScreen: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-
-    const unsubscribe = getUserWorks(user.uid, (data) => {
-      setWorks(data);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
   const filteredWorks = useMemo(() => {
     if (statusFilter === 'all') return works;
     return works.filter((w) => w.status === statusFilter);
@@ -70,7 +64,8 @@ const WorkScreen: React.FC = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await refetch();
+    setRefreshing(false);
   };
 
   const openAddModal = () => {
@@ -143,10 +138,10 @@ const WorkScreen: React.FC = () => {
       }
 
       if (editingWork) {
-        await updateDocument(COLLECTIONS.WORKS, editingWork.id, workData);
+        await workService.update(editingWork.id, workData);
         showSuccess('Project updated');
       } else {
-        await createDocument(COLLECTIONS.WORKS, workData);
+        await workService.create(workData);
         showSuccess('Project created');
       }
 
@@ -172,7 +167,7 @@ const WorkScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDocument(COLLECTIONS.WORKS, editingWork.id);
+              await workService.delete(editingWork.id);
               showSuccess('Project deleted');
               setModalVisible(false);
             } catch (error) {

@@ -53,6 +53,7 @@ export interface Transaction {
   description?: string;
   note: string;
   date: string;
+  time: string; // HH:mm format
   isRecurring: boolean;
   recurringId?: string;
   bankAccount?: string;
@@ -107,6 +108,25 @@ export interface TimeEntry {
   hoursWorked: number;
 }
 
+export type PaymentType = 'advance' | 'partial' | 'balance' | 'other';
+
+export interface WorkPayment {
+  id: string;
+  type: PaymentType;
+  amount: number;
+  date: string;
+  description?: string;
+  note?: string;
+}
+
+export interface AdditionalWork {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  note?: string;
+}
+
 export interface Quotation {
   id: string;
   uid: string;
@@ -154,6 +174,10 @@ export interface Work {
   timeEntries: TimeEntry[];
   hourlyRate?: number;
   photos: string[];
+  payments: WorkPayment[];
+  additionalWorks: AdditionalWork[];
+  totalPaymentsReceived: number;
+  totalAdditionalAmount: number;
   isProfitTransferred: boolean;
   profitTransferredAmount?: number;
   profitTransferredDate?: Date;
@@ -165,7 +189,7 @@ export interface Work {
 }
 
 // Bank Account Types
-export type BankType = 'bank' | 'wallet' | 'investment' | 'cash';
+export type BankType = 'bank' | 'card' | 'wallet' | 'investment';
 
 export interface BankAccount {
   id: string;
@@ -282,12 +306,43 @@ export type RootStackParamList = {
   Work: undefined;
   WorkDetail: { workId: string };
   MoreMenu: undefined;
+  BankAccounts: undefined;
   Budgets: undefined;
   Goals: undefined;
+  Quotations: undefined;
+  QuotationDetail: undefined;
   Analysis: undefined;
   Settings: undefined;
   BillReminders: undefined;
+  DashboardCustomization: undefined;
 };
+
+// Dashboard Types
+export type DashboardCardId = 
+  | 'balance'
+  | 'incomeExpense'
+  | 'budgetStatus'
+  | 'workOverview'
+  | 'netWorth'
+  | 'spendingTrends'
+  | 'topCategories'
+  | 'upcomingBills'
+  | 'goals'
+  | 'recentTransactions';
+
+export interface DashboardCard {
+  id: DashboardCardId;
+  name: string;
+  enabled: boolean;
+  position: number;
+  customColor?: string;
+}
+
+export interface DashboardConfig {
+  version: number;
+  cards: DashboardCard[];
+  lastUpdated: number;
+}
 
 // Theme Types
 export interface ThemeColors {

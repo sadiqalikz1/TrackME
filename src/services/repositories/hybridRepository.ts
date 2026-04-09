@@ -1,0 +1,560 @@
+import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import { localRepository } from './localRepository';
+import { remoteRepository, setRemoteRepositoryUid } from './remoteRepository';
+import { database, CollectionName } from '../database';
+import { IRepository } from './localRepository';
+
+/**
+ * HybridRepository: Smart routing between local and remote repositories
+ * - Offline: Use LocalRepository only
+ * - Online: Read from local cache, sync with Firebase in background
+ * - Conflict resolution: Last-write-wins
+ */
+export class HybridRepository implements IRepository {
+  private isOnline: boolean = false;
+  private currentUid: string | null = null;
+  private isGuestUser: boolean = false;
+  private isUserActionInProgress: boolean = false; // Flag to prevent sync during user actions
+  private lastSyncTimes: Map<string, number> = new Map(); // Track last sync time per collection
+  private readonly SYNC_DEBOUNCE_MS = 30000; // 30 seconds minimum between syncs per collection
+
+  constructor() {
+    this.initNetworkListener();
+  }
+
+  setCurrentUid(uid: string): void {
+    this.currentUid = uid;
+    setRemoteRepositoryUid(uid); // Pass uid to remoteRepository for filtering
+    console.log(`HybridRepository: Set uid for user ${uid}`);
+  }
+
+  setIsGuest(isGuest: boolean): void {
+    this.isGuestUser = isGuest;
+    console.log(`HybridRepository: Guest mode ${isGuest ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Set user action in progress flag
+   * When true, background sync is paused to avoid interrupting user
+   */
+  setUserActionInProgress(inProgress: boolean): void {
+    this.isUserActionInProgress = inProgress;
+    if (inProgress) {
+      console.log('HybridRepository: User action in progress, background sync paused');
+    }
+  }
+
+  /**
+   * Check if user action is in progress
+   */
+  isUserActionActive(): boolean {
+    return this.isUserActionInProgress;
+  }
+
+  private initNetworkListener(): void {
+    NetInfo.addEventListener((state: NetInfoState) => {
+      this.isOnline = state.isConnected ?? false;
+      console.log(`Network status changed: ${this.isOnline ? 'ONLINE' : 'OFFLINE'}`);
+    });
+
+    // Check initial status
+    NetInfo.fetch().then((state) => {
+      this.isOnline = state.isConnected ?? false;
+      console.log(`Initial network status: ${this.isOnline ? 'ONLINE' : 'OFFLINE'}`);
+    });
+  }
+
+  getNetworkStatus(): boolean {
+    return this.isOnline;
+  }
+
+  isGuestMode(): boolean {
+    return this.isGuestUser;
+  }
+
+  async clearGuestData(): Promise<void> {
+    if (!this.isGuestUser) return; // Only clear if currently in guest mode
+    
+    try {
+      console.log('HybridRepository: Clearing guest data from local database');
+      await database.clearAllData();
+      console.log('HybridRepository: Guest data cleared successfully');
+    } catch (error) {
+      console.error('HybridRepository: Error clearing guest data:', error);
+    }
+  }
+
+  /**
+   * Clear all local data (for "Use Cloud Only" strategy)
+   * Used when user wants to discard local data and use cloud data
+   */
+  async clearLocalData(): Promise<void> {
+    try {
+      console.log('HybridRepository: Clearing all local data');
+      await database.clearAllData();
+      console.log('HybridRepository: Local data cleared successfully');
+    } catch (error) {
+      console.error('HybridRepository: Error clearing local data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Pull cloud data only (for "Use Cloud Only" strategy)
+   * Clears local data first, then pulls all data from cloud
+   */
+  async pullCloudOnly(): Promise<void> {
+    if (!this.isOnline) {
+      throw new Error('Cannot pull cloud data while offline');
+    }
+
+    if (!this.currentUid) {
+      throw new Error('User uid not set');
+    }
+
+    try {
+      console.log('HybridRepository: Starting pullCloudOnly sync');
+      
+      // Step 1: Clear all local data
+      await this.clearLocalData();
+
+      // Step 2: Pull all collections from cloud (users managed separately)
+      const collections = ['transactions', 'budgets', 'goals', 'work', 'quotations', 'billReminders'] as const;
+
+      for (const collection of collections) {
+        try {
+          const remoteDocs = await remoteRepository.getCollection(collection);
+          console.log(`HybridRepository: Pulled ${remoteDocs.length} documents from ${collection}`);
+          
+          for (const doc of remoteDocs) {
+            await localRepository.saveDocument(collection, doc.id, doc);
+            await database.markDocumentSynced(collection, doc.id);
+          }
+        } catch (error) {
+          console.error(`HybridRepository: Failed to pull ${collection}:`, error);
+        }
+      }
+
+      console.log('HybridRepository: pullCloudOnly completed');
+    } catch (error) {
+      console.error('HybridRepository: Error in pullCloudOnly:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Push local data to cloud (for "Push Local to Cloud" strategy)
+   * Clears cloud data first, then pushes all local data
+   */
+  async pushLocalToCloud(): Promise<void> {
+    if (!this.isOnline) {
+      throw new Error('Cannot push to cloud while offline');
+    }
+
+    if (!this.currentUid) {
+      throw new Error('User uid not set');
+    }
+
+    try {
+      console.log('HybridRepository: Starting pushLocalToCloud sync');
+
+      const collections = ['transactions', 'budgets', 'goals', 'work', 'quotations', 'billReminders'] as const;
+
+      for (const collection of collections) {
+        try {
+          // Step 1: Clear cloud data for this collection
+          await remoteRepository.clearUserData(collection);
+
+          // Step 2: Get all local documents
+          const localDocs = await localRepository.getCollection(collection);
+          console.log(`HybridRepository: Pushing ${localDocs.length} documents to ${collection}`);
+
+          // Step 3: Push each local document to cloud
+          for (const doc of localDocs) {
+            // Add uid to document if not present
+            const docWithUid = { ...doc, uid: this.currentUid };
+            await remoteRepository.saveDocument(collection, doc.id, docWithUid);
+            await database.markDocumentSynced(collection, doc.id);
+          }
+        } catch (error) {
+          console.error(`HybridRepository: Failed to push ${collection}:`, error);
+        }
+      }
+
+      console.log('HybridRepository: pushLocalToCloud completed');
+    } catch (error) {
+      console.error('HybridRepository: Error in pushLocalToCloud:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Merge local and cloud data (for "Merge Data" strategy)
+   * Uses last-write-wins conflict resolution
+   */
+  async mergeData(): Promise<void> {
+    if (!this.isOnline) {
+      throw new Error('Cannot merge data while offline');
+    }
+
+    if (!this.currentUid) {
+      throw new Error('User uid not set');
+    }
+
+    try {
+      console.log('HybridRepository: Starting mergeData sync');
+
+      // Use existing syncAll which performs last-write-wins merge
+      await this.syncAll();
+
+      console.log('HybridRepository: mergeData completed');
+    } catch (error) {
+      console.error('HybridRepository: Error in mergeData:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if there is any local data
+   */
+  async hasLocalData(): Promise<boolean> {
+    return await database.hasLocalData();
+  }
+
+  /**
+   * Check if cloud has any user data
+   */
+  async hasCloudData(): Promise<boolean> {
+    if (!this.isOnline || !this.currentUid) {
+      return false;
+    }
+
+    try {
+      // Check primary collections
+      const collections = ['transactions', 'budgets', 'goals', 'work'] as const;
+      for (const collection of collections) {
+        const hasData = await remoteRepository.hasUserData(collection);
+        if (hasData) return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('HybridRepository: Error checking cloud data:', error);
+      return false;
+    }
+  }
+
+  async getCollection(collection: CollectionName): Promise<any[]> {
+    try {
+      // Always read from local first (faster, works offline)
+      const localDocs = await localRepository.getCollection(collection);
+
+      // NOTE: Background sync is now handled by SyncEngine on a schedule
+      // This prevents aggressive syncing on every read which causes UI flickering
+      // Do NOT call syncCollectionInBackground here
+
+      return localDocs;
+    } catch (error) {
+      console.error(`HybridRepository: Error getting ${collection}:`, error);
+      return [];
+    }
+  }
+
+  async getDocument(collection: CollectionName, id: string): Promise<any | null> {
+    try {
+      // Read from local first
+      let doc = await localRepository.getDocument(collection, id);
+
+      if (this.isOnline && !doc) {
+        // Document not in local cache, try Firebase
+        doc = await remoteRepository.getDocument(collection, id);
+        if (doc) {
+          // Cache it locally
+          await localRepository.saveDocument(collection, id, doc);
+        }
+      }
+
+      return doc;
+    } catch (error) {
+      console.error(`HybridRepository: Error getting ${collection}/${id}:`, error);
+      return null;
+    }
+  }
+
+  async saveDocument(collection: CollectionName, id: string, data: any): Promise<void> {
+    try {
+      // Always save to local first
+      await localRepository.saveDocument(collection, id, data);
+
+      // If online and not guest user, also sync to Firebase immediately
+      if (this.isOnline && !this.isGuestUser) {
+        try {
+          await remoteRepository.saveDocument(collection, id, data);
+          // Mark as synced
+          await database.markDocumentSynced(collection, id);
+        } catch (error) {
+          console.warn(`HybridRepository: Failed to sync save to Firebase, will retry later:`, error);
+        }
+      }
+    } catch (error) {
+      console.error(`HybridRepository: Error saving ${collection}/${id}:`, error);
+      throw error;
+    }
+  }
+
+  async updateDocument(collection: CollectionName, id: string, data: Partial<any>): Promise<void> {
+    try {
+      // Always update local first
+      await localRepository.updateDocument(collection, id, data);
+
+      // If online and not guest user, also sync to Firebase immediately
+      if (this.isOnline && !this.isGuestUser) {
+        try {
+          await remoteRepository.updateDocument(collection, id, data);
+          // Mark as synced
+          await database.markDocumentSynced(collection, id);
+        } catch (error) {
+          console.warn(`HybridRepository: Failed to sync update to Firebase, will retry later:`, error);
+        }
+      }
+    } catch (error) {
+      console.error(`HybridRepository: Error updating ${collection}/${id}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteDocument(collection: CollectionName, id: string): Promise<void> {
+    try {
+      // Always delete local first
+      await localRepository.deleteDocument(collection, id);
+
+      // If online and not guest user, also sync to Firebase immediately
+      if (this.isOnline && !this.isGuestUser) {
+        try {
+          await remoteRepository.deleteDocument(collection, id);
+          // Mark as synced
+          await database.markDocumentSynced(collection, id);
+        } catch (error) {
+          console.warn(`HybridRepository: Failed to sync delete to Firebase, will retry later:`, error);
+        }
+      }
+    } catch (error) {
+      console.error(`HybridRepository: Error deleting ${collection}/${id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync a collection: Pull latest from Firebase and apply last-write-wins conflict resolution
+   * Called in background, doesn't block UI
+   * Skipped for guest users (local-only mode)
+   */
+  private async syncCollectionInBackground(collection: CollectionName): Promise<void> {
+    try {
+      // Skip if user action in progress (e.g., filling a form)
+      if (this.isUserActionInProgress) {
+        return;
+      }
+
+      // Skip remote sync for guest users (local-only mode) - silent
+      if (this.isGuestUser) {
+        return;
+      }
+
+      // Debounce: Skip if this collection was synced recently
+      const lastSync = this.lastSyncTimes.get(collection) || 0;
+      const now = Date.now();
+      if (now - lastSync < this.SYNC_DEBOUNCE_MS) {
+        return; // Already synced recently, skip silently
+      }
+      this.lastSyncTimes.set(collection, now);
+
+      // Skip remote sync if uid not set yet
+      if (!this.currentUid) {
+        return;
+      }
+
+      console.log(`Syncing collection: ${collection}`);
+
+      // Fetch all docs from Firebase
+      const remoteDocs = await remoteRepository.getCollection(collection);
+
+      // Apply last-write-wins conflict resolution
+      for (const remoteDoc of remoteDocs) {
+        const localDoc = await localRepository.getDocument(collection, remoteDoc.id);
+
+        if (!localDoc) {
+          // Document only in Firebase, add to local
+          await localRepository.saveDocument(collection, remoteDoc.id, remoteDoc);
+        } else {
+          // Document exists in both, use last-write-wins
+          const localTime = localDoc.updatedAt?.getTime?.() || localDoc.updatedAt || 0;
+          const remoteTime = remoteDoc.updatedAt?.seconds ? remoteDoc.updatedAt.seconds * 1000 : 0;
+
+          if (remoteTime > localTime) {
+            // Firebase version is newer, update local
+            await localRepository.updateDocument(collection, remoteDoc.id, remoteDoc);
+          }
+          // else: Local version is newer, keep it
+        }
+      }
+
+      // Update sync metadata
+      await database.updateSyncMetadata(collection, {
+        lastSyncTime: Date.now(),
+      });
+
+      console.log(`Sync completed for ${collection}`);
+    } catch (error) {
+      console.error(`HybridRepository: Error syncing ${collection}:`, error);
+      // Update error in metadata
+      await database.updateSyncMetadata(collection, {
+        lastError: String(error),
+        lastErrorTime: Date.now(),
+      });
+    }
+  }
+
+  /**
+   * Full sync: Push unsynced changes to Firebase, then pull latest from Firebase
+   * Called when app goes online or periodically
+   */
+  async fullSync(collection: CollectionName): Promise<void> {
+    if (!this.isOnline) {
+      console.warn(`HybridRepository: Cannot sync ${collection}, device is offline`);
+      return;
+    }
+
+    if (!this.currentUid) {
+      console.warn(`HybridRepository: Cannot sync ${collection}, user uid not set yet`);
+      return;
+    }
+
+    try {
+      console.log(`Starting full sync for ${collection}`);
+
+      // Phase 1: Push unsynced local documents to Firebase
+      const unsyncedDocs = await database.getUnsyncedDocuments(collection);
+
+      for (const doc of unsyncedDocs) {
+        try {
+          const data = JSON.parse(doc.data);
+
+          if (doc.operation === 'delete') {
+            await remoteRepository.deleteDocument(collection, doc.id);
+          } else {
+            // create or update
+            const existing = await remoteRepository.getDocument(collection, doc.id);
+            if (existing) {
+              await remoteRepository.updateDocument(collection, doc.id, data);
+            } else {
+              await remoteRepository.saveDocument(collection, doc.id, data);
+            }
+          }
+
+          // Mark as synced
+          await database.markDocumentSynced(collection, doc.id);
+        } catch (error) {
+          console.error(`HybridRepository: Failed to push document ${doc.id}:`, error);
+        }
+      }
+
+      // Phase 2: Pull and merge from Firebase
+      await this.syncCollectionInBackground(collection);
+
+      console.log(`Full sync completed for ${collection}`);
+    } catch (error) {
+      console.error(`HybridRepository: Error in full sync for ${collection}:`, error);
+      await database.updateSyncMetadata(collection, {
+        lastError: String(error),
+        lastErrorTime: Date.now(),
+      });
+    }
+  }
+
+  /**
+   * Sync all collections
+   * Note: 'users' collection is managed separately in AuthContext
+   */
+  async syncAll(): Promise<void> {
+    const collections = ['transactions', 'budgets', 'goals', 'work', 'quotations', 'billReminders'] as const;
+
+    for (const collection of collections) {
+      try {
+        await this.fullSync(collection);
+      } catch (error) {
+        console.error(`HybridRepository: Failed to sync ${collection}:`, error);
+      }
+    }
+  }
+}
+
+export const hybridRepository = new HybridRepository();
+
+/**
+ * Helper function to set the current user's uid in both repositories
+ * Call this from AuthContext after successful login
+ */
+export function setHybridRepositoryUid(uid: string): void {
+  hybridRepository.setCurrentUid(uid);
+}
+
+/**
+ * Helper function to set guest mode (local-only, no Firebase sync)
+ * Call this from AuthContext when guest user is detected
+ */
+export function setHybridRepositoryGuest(isGuest: boolean): void {
+  hybridRepository.setIsGuest(isGuest);
+}
+
+/**
+ * Helper function to clear guest data when transitioning to authenticated user
+ * Call this from AuthContext before logging in an authenticated user after guest mode
+ */
+export async function clearGuestData(): Promise<void> {
+  await hybridRepository.clearGuestData();
+}
+
+/**
+ * Helper function to check if local data exists
+ */
+export async function checkHasLocalData(): Promise<boolean> {
+  return await hybridRepository.hasLocalData();
+}
+
+/**
+ * Helper function to check if cloud data exists
+ */
+export async function checkHasCloudData(): Promise<boolean> {
+  return await hybridRepository.hasCloudData();
+}
+
+/**
+ * Sync strategy type
+ */
+export type SyncStrategy = 'cloud_only' | 'merge' | 'push_local';
+
+/**
+ * Execute sync with specified strategy
+ */
+export async function syncWithStrategy(strategy: SyncStrategy): Promise<void> {
+  switch (strategy) {
+    case 'cloud_only':
+      await hybridRepository.pullCloudOnly();
+      break;
+    case 'merge':
+      await hybridRepository.mergeData();
+      break;
+    case 'push_local':
+      await hybridRepository.pushLocalToCloud();
+      break;
+  }
+}
+
+/**
+ * Helper function to pause/resume background sync during user actions
+ * Call with true when user starts filling a form, false when done
+ * This prevents sync from interrupting user input
+ */
+export function setUserActionInProgress(inProgress: boolean): void {
+  hybridRepository.setUserActionInProgress(inProgress);
+}
