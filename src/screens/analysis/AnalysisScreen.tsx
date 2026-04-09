@@ -198,7 +198,7 @@ const AnalysisScreen: React.FC = () => {
       {/* Offline Banner */}
       {isOffline && (
         <View style={[styles.offlineBanner, { backgroundColor: colors.warning }]}>
-          <Ionicons name="wifi-off" size={16} color="#fff" />
+          <Ionicons name="cloud-offline" size={16} color="#fff" />
           <Text style={styles.offlineText}>Offline - Data from cache</Text>
         </View>
       )}

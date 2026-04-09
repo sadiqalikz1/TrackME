@@ -260,14 +260,18 @@ const GoalsScreen: React.FC = () => {
       {/* Offline Banner */}
       {isOffline && (
         <View style={[styles.offlineBanner, { backgroundColor: colors.warning }]}>
-          <Ionicons name="wifi-off" size={16} color="#fff" />
+          <Ionicons name="cloud-offline" size={16} color="#fff" />
           <Text style={styles.offlineText}>Offline - Data from cache</Text>
         </View>
       )}
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => {
+          if (navigation.canGoBack?.()) {
+            navigation.goBack();
+          }
+        }}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>Savings Goals</Text>
