@@ -10,17 +10,25 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
-import { Card, Input, Modal, Button, CategoryGrid, EmptyState, DateTimePicker } from '@/components/ui';
+import { Card, Input, Modal, Button, CategoryGrid, EmptyState, DateTimePicker, BankAccountSelector } from '@/components/ui';
 import { TransactionItem } from '@/components/common';
-import { Transaction, TransactionCategory, TransactionType } from '@/types';
+import { Transaction, TransactionCategory, TransactionType, BankAccount, BankType } from '@/types';
 import { useData, useDataMutations } from '@/hooks';
 import { transactionService } from '@/services/dataService';
 import { COLLECTIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/utils/constants';
 import { formatDate, parseCurrencyInput, isValidAmount } from '@/utils/formatters';
 
 type FilterType = 'all' | 'income' | 'expense';
+type PaymentMode = 'cash' | 'bank' | 'wallet' | 'card';
+
+const PAYMENT_MODES: { mode: PaymentMode; label: string; icon: string; color: string }[] = [
+  { mode: 'cash', label: 'Cash', icon: 'cash', color: '#10b981' },
+  { mode: 'bank', label: 'Bank', icon: 'swap-horizontal', color: '#3b82f6' },
+  { mode: 'wallet', label: 'Wallet', icon: 'wallet', color: '#8b5cf6' },
+  { mode: 'card', label: 'Card', icon: 'card', color: '#f59e0b' },
+];
 
 const TransactionsScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -28,6 +36,7 @@ const TransactionsScreen: React.FC = () => {
   const { showSuccess, showError } = useNotification();
   const insets = useSafeAreaInsets();
   const route = useRoute();
+  const navigation = useNavigation();
 
   // Fetch transactions using offline-first hook
   const { data: transactions, loading, refetch } = useData('transactions');
@@ -39,6 +48,7 @@ const TransactionsScreen: React.FC = () => {
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [dateTimePickerVisible, setDateTimePickerVisible] = useState(false);
+  const [accountSelectorVisible, setAccountSelectorVisible] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionType, setTransactionType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
@@ -48,7 +58,10 @@ const TransactionsScreen: React.FC = () => {
     new Date().toISOString().split('T')[0]
   );
   const [transactionTime, setTransactionTime] = useState<string>('12:00');
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
   // Handle opening add modal from navigation
   useEffect(() => {
@@ -62,7 +75,7 @@ const TransactionsScreen: React.FC = () => {
 
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
-    return transactions.filter((t) => {
+    return transactions.filter((t: Transaction) => {
       const matchesType = filterType === 'all' || t.type === filterType;
       const matchesSearch =
         searchQuery === '' ||
@@ -89,6 +102,8 @@ const TransactionsScreen: React.FC = () => {
     setNote('');
     setTransactionDate(new Date().toISOString().split('T')[0]);
     setTransactionTime('12:00');
+    setPaymentMode('cash');
+    setSelectedAccountId(undefined);
     setModalVisible(true);
   };
 
@@ -100,6 +115,9 @@ const TransactionsScreen: React.FC = () => {
     setNote(transaction.note);
     setTransactionDate(transaction.date);
     setTransactionTime(transaction.time || '12:00');
+    setPaymentMode((transaction.bankAccount as PaymentMode) || 'cash');
+    // TODO: Load accountId from transaction when saving to DB
+    setSelectedAccountId(undefined);
     setModalVisible(true);
   };
 
@@ -121,6 +139,7 @@ const TransactionsScreen: React.FC = () => {
         note,
         date: transactionDate,
         time: transactionTime,
+        bankAccount: paymentMode,
         isRecurring: false,
       };
 
@@ -192,7 +211,15 @@ const TransactionsScreen: React.FC = () => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        {navigation.canGoBack?.() ? (
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
         <Text style={[styles.title, { color: colors.text }]}>Transactions</Text>
+        <View style={{ width: 24 }} />
       </View>
 
       {/* Search & Filter */}
@@ -338,12 +365,70 @@ const TransactionsScreen: React.FC = () => {
 
         {/* Category */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>Category</Text>
-        <CategoryGrid
-          type="transaction"
-          selected={category}
-          onSelect={(c) => setCategory(c as TransactionCategory)}
-          filter={transactionType}
-        />
+        <View style={{ maxHeight: 250, overflow: 'hidden', marginBottom: 16 }}>
+          <CategoryGrid
+            type="transaction"
+            selected={category}
+            onSelect={(c) => setCategory(c as TransactionCategory)}
+            filter={transactionType}
+          />
+        </View>
+
+        {/* Payment Mode */}
+        <View style={styles.paymentModeContainer}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Payment Mode</Text>
+          <View style={styles.paymentModeRow}>
+            {PAYMENT_MODES.map((pm) => (
+              <TouchableOpacity
+                key={pm.mode}
+                onPress={() => setPaymentMode(pm.mode)}
+                style={[
+                  styles.paymentModeButton,
+                  {
+                    backgroundColor: paymentMode === pm.mode ? pm.color : colors.card,
+                    borderColor: paymentMode === pm.mode ? pm.color : colors.border,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={pm.icon as any}
+                  size={20}
+                  color={paymentMode === pm.mode ? '#ffffff' : pm.color}
+                />
+                <Text
+                  style={[
+                    styles.paymentModeText,
+                    { color: paymentMode === pm.mode ? '#ffffff' : colors.text },
+                  ]}
+                >
+                  {pm.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Account Selection (show when payment mode is not cash) */}
+        {paymentMode !== 'cash' && bankAccounts.length > 0 && (
+          <View style={{ marginBottom: 20 }}>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Select Account</Text>
+            <TouchableOpacity
+              onPress={() => setAccountSelectorVisible(true)}
+              style={[
+                styles.accountButton,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons name="wallet" size={20} color={colors.primary} />
+              <Text style={[styles.accountButtonText, { color: colors.text }]}>
+                {selectedAccountId
+                  ? bankAccounts.find(a => a.id === selectedAccountId)?.name || 'Select Account'
+                  : 'Choose a ' + paymentMode}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Date & Time */}
         <View style={styles.dateTimeContainer}>
@@ -409,6 +494,16 @@ const TransactionsScreen: React.FC = () => {
         title="Select Transaction Date & Time"
         showTime={true}
       />
+
+      {/* Bank Account Selector Modal */}
+      <BankAccountSelector
+        visible={accountSelectorVisible}
+        onClose={() => setAccountSelectorVisible(false)}
+        onSelect={(account) => setSelectedAccountId(account.id)}
+        accounts={bankAccounts}
+        paymentMode={paymentMode as BankType}
+        selectedAccountId={selectedAccountId}
+      />
     </View>
   );
 };
@@ -420,10 +515,15 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
   },
   searchContainer: {
     paddingHorizontal: 16,
@@ -516,6 +616,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   dateTimeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  paymentModeContainer: {
+    marginBottom: 20,
+  },
+  paymentModeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  paymentModeButton: {
+    flex: 1,
+    minWidth: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1.5,
+  },
+  paymentModeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  accountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  accountButtonText: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '500',
   },

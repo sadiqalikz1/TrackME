@@ -178,8 +178,14 @@ const QuotationsScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      {/* Quotations List - FlatList as main scrolling container */}
+      <FlatList
         style={styles.content}
+        data={filteredQuotations}
+        renderItem={renderQuotationItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -187,46 +193,35 @@ const QuotationsScreen: React.FC = () => {
             tintColor={colors.primary}
           />
         }
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Status Filter */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScroll}
-        >
-          {(['all', 'pending', 'accepted', 'rejected', 'expired'] as const).map((status) => (
-            <TouchableOpacity
-              key={status}
-              style={[
-                styles.filterButton,
-                {
-                  backgroundColor: selectedStatus === status ? colors.primary : colors.card,
-                  borderColor: colors.border,
-                }
-              ]}
-              onPress={() => setSelectedStatus(status)}
-            >
-              <Text style={[
-                styles.filterText,
-                { color: selectedStatus === status ? '#fff' : colors.text }
-              ]}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Quotations List */}
-        {filteredQuotations.length > 0 ? (
-          <FlatList
-            data={filteredQuotations}
-            renderItem={renderQuotationItem}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            contentContainerStyle={styles.listContent}
-          />
-        ) : (
+        ListHeaderComponent={
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+          >
+            {(['all', 'pending', 'accepted', 'rejected', 'expired'] as const).map((status) => (
+              <TouchableOpacity
+                key={status}
+                style={[
+                  styles.filterButton,
+                  {
+                    backgroundColor: selectedStatus === status ? colors.primary : colors.card,
+                    borderColor: colors.border,
+                  }
+                ]}
+                onPress={() => setSelectedStatus(status)}
+              >
+                <Text style={[
+                  styles.filterText,
+                  { color: selectedStatus === status ? '#fff' : colors.text }
+                ]}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        }
+        ListEmptyComponent={
           <EmptyState 
             icon="document-text"
             title="No Quotations"
@@ -235,8 +230,8 @@ const QuotationsScreen: React.FC = () => {
               : `No ${selectedStatus} quotations`
             }
           />
-        )}
-      </ScrollView>
+        }
+      />
 
       {/* Create Quotation Modal */}
       <QuotationModal

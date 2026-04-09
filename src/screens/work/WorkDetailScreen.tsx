@@ -149,6 +149,7 @@ const WorkDetailScreen: React.FC = () => {
         category: data.category,
         note: `Profit from: ${work.title}`,
         date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
         isRecurring: false,
         bankAccount: data.bankAccount,
         workId: work.id,

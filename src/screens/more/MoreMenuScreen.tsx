@@ -33,6 +33,14 @@ const menuItems: MenuItem[] = [
     screen: 'Goals',
   },
   {
+    id: 'bank-accounts',
+    icon: 'wallet',
+    label: 'Bank Accounts',
+    description: 'Manage your accounts and cards',
+    color: '#3b82f6',
+    screen: 'BankAccounts',
+  },
+  {
     id: 'quotations',
     icon: 'document-text',
     label: 'Quotations',

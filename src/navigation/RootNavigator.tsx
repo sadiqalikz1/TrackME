@@ -23,6 +23,7 @@ import WorkScreen from '@/screens/work/WorkScreen';
 import WorkDashboardScreen from '@/screens/work/WorkDashboardScreen';
 import WorkDetailScreen from '@/screens/work/WorkDetailScreen';
 import MoreMenuScreen from '@/screens/more/MoreMenuScreen';
+import BankAccountsScreen from '@/screens/more/BankAccountsScreen';
 import BudgetsScreen from '@/screens/budgets/BudgetsScreen';
 import GoalsScreen from '@/screens/goals/GoalsScreen';
 import QuotationsScreen from '@/screens/quotations/QuotationsScreen';
@@ -68,6 +69,7 @@ const MoreStackNavigator = () => {
       <MoreStack.Screen name="MoreMenu" component={MoreMenuScreen} />
       <MoreStack.Screen name="Budgets" component={BudgetsScreen} />
       <MoreStack.Screen name="Goals" component={GoalsScreen} />
+      <MoreStack.Screen name="BankAccounts" component={BankAccountsScreen} />
       <MoreStack.Screen name="Quotations" component={QuotationsScreen} />
       <MoreStack.Screen name="QuotationDetail" component={QuotationDetailScreen} />
       <MoreStack.Screen name="Analysis" component={AnalysisScreen} />

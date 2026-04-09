@@ -189,7 +189,7 @@ export interface Work {
 }
 
 // Bank Account Types
-export type BankType = 'bank' | 'wallet' | 'investment' | 'cash';
+export type BankType = 'bank' | 'card' | 'wallet' | 'investment';
 
 export interface BankAccount {
   id: string;
@@ -306,8 +306,11 @@ export type RootStackParamList = {
   Work: undefined;
   WorkDetail: { workId: string };
   MoreMenu: undefined;
+  BankAccounts: undefined;
   Budgets: undefined;
   Goals: undefined;
+  Quotations: undefined;
+  QuotationDetail: undefined;
   Analysis: undefined;
   Settings: undefined;
   BillReminders: undefined;
