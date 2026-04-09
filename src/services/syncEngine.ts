@@ -67,6 +67,11 @@ export class SyncEngine {
   private handleAppStateChange(state: AppStateStatus): void {
     this.appState = state;
 
+    // Skip sync logging for guest users (silent operation)
+    if (hybridRepository.isGuestMode()) {
+      return;
+    }
+
     if (state === 'active') {
       console.log('App came to foreground, triggering sync...');
       this.syncIfOnline();
@@ -77,9 +82,15 @@ export class SyncEngine {
 
   /**
    * Set up periodic sync every 60 seconds
+   * (Skipped silently for guest users)
    */
   private setupPeriodicSync(): void {
     this.syncTimer = setInterval(() => {
+      // Skip silent for guest mode
+      if (hybridRepository.isGuestMode()) {
+        return;
+      }
+
       if (this.isSyncingAllowed && this.appState === 'active') {
         this.syncIfOnline();
       }
@@ -100,16 +111,25 @@ export class SyncEngine {
 
   /**
    * Monitor network state changes
+   * (Skipped for guest users)
    */
   monitorNetworkState(): void {
+    // Skip network monitoring for guest users - no logging
+    if (hybridRepository.isGuestMode()) {
+      return;
+    }
+
     // Check network status periodically (every 5 seconds)
     setInterval(async () => {
       const isCurrentlyOnline = hybridRepository.getNetworkStatus();
 
       // Transition from offline to online
       if (!this.lastNetworkState && isCurrentlyOnline) {
-        console.log('Device went online, triggering full sync...');
-        await this.performSync();
+        // Silent skip for guest mode
+        if (!hybridRepository.isGuestMode()) {
+          console.log('Device went online, triggering full sync...');
+          await this.performSync();
+        }
       }
 
       this.lastNetworkState = isCurrentlyOnline;
@@ -118,8 +138,14 @@ export class SyncEngine {
 
   /**
    * Perform sync operation with retry logic
+   * (Silently skipped for guest users)
    */
   private async performSync(retryCount: number = 0): Promise<void> {
+    // Silent skip for guest users - no logging
+    if (hybridRepository.isGuestMode()) {
+      return;
+    }
+
     if (!this.isSyncEnabled) {
       console.log('Sync not yet enabled (user not authenticated), skipping...');
       return;

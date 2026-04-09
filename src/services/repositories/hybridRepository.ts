@@ -47,6 +47,10 @@ export class HybridRepository implements IRepository {
     return this.isOnline;
   }
 
+  isGuestMode(): boolean {
+    return this.isGuestUser;
+  }
+
   async getCollection(collection: CollectionName): Promise<any[]> {
     try {
       // Always read from local first (faster, works offline)
@@ -156,9 +160,8 @@ export class HybridRepository implements IRepository {
    */
   private async syncCollectionInBackground(collection: CollectionName): Promise<void> {
     try {
-      // Skip remote sync for guest users (local-only mode)
+      // Skip remote sync for guest users (local-only mode) - silent
       if (this.isGuestUser) {
-        console.log(`HybridRepository: Skipping remote sync for ${collection}, guest mode enabled`);
         return;
       }
 
