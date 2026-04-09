@@ -165,7 +165,7 @@ const GoalsScreen: React.FC = () => {
 
   const markAsComplete = async (goal: Goal) => {
     try {
-      await updateDocument(COLLECTIONS.GOALS, goal.id, {
+      await updateGoal(goal.id, {
         saved: goal.target,
         isCompleted: true,
       });

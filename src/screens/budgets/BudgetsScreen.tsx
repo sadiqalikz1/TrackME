@@ -14,7 +14,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Modal, Button, Input, ProgressBar, EmptyState } from '@/components/ui';
 import { Budget, Transaction, TransactionCategory } from '@/types';
-import { getUserBudgets, getUserTransactions, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
+import { useData } from '@/hooks';
+import { budgetService, transactionService } from '@/services/dataService';
 import { COLLECTIONS, TRANSACTION_CATEGORIES, EXPENSE_CATEGORIES } from '@/utils/constants';
 import { formatCurrency, getMonthKey, parseCurrencyInput, formatPercentage } from '@/utils/formatters';
 
@@ -25,9 +26,10 @@ const BudgetsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
 
-  const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Fetch budgets and transactions using offline-first hooks
+  const { data: budgetsData, loading, refetch } = useData('budgets');
+  const { data: transactionsData, refetch: refetchTransactions } = useData('transactions');
+
   const [refreshing, setRefreshing] = useState(false);
 
   // Modal state
@@ -40,23 +42,17 @@ const BudgetsScreen: React.FC = () => {
   const currentMonth = getMonthKey();
   const currency = user?.currency || 'USD';
 
-  useEffect(() => {
-    if (!user) return;
+  // Filter budgets by current month
+  const budgets = useMemo(() => {
+    return budgetsData && Array.isArray(budgetsData)
+      ? budgetsData.filter((b: Budget) => b.month === currentMonth)
+      : [];
+  }, [budgetsData, currentMonth]);
 
-    const unsubBudgets = getUserBudgets(user.uid, (data) => {
-      setBudgets(data.filter((b) => b.month === currentMonth));
-      setLoading(false);
-    });
-
-    const unsubTransactions = getUserTransactions(user.uid, (data) => {
-      setTransactions(data);
-    });
-
-    return () => {
-      unsubBudgets();
-      unsubTransactions();
-    };
-  }, [user, currentMonth]);
+  // Ensure transactions is array
+  const transactions = useMemo(() => {
+    return transactionsData && Array.isArray(transactionsData) ? transactionsData : [];
+  }, [transactionsData]);
 
   // Calculate spent amount per category
   const budgetsWithSpent = useMemo(() => {
@@ -129,10 +125,10 @@ const BudgetsScreen: React.FC = () => {
       };
 
       if (editingBudget) {
-        await updateDocument(COLLECTIONS.BUDGETS, editingBudget.id, { limit: parsedLimit });
+        await budgetService.update(editingBudget.id, { limit: parsedLimit });
         showSuccess('Budget updated');
       } else {
-        await createDocument(COLLECTIONS.BUDGETS, budgetData);
+        await budgetService.create(budgetData);
         showSuccess('Budget created');
       }
 
@@ -152,7 +148,7 @@ const BudgetsScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(COLLECTIONS.BUDGETS, budget.id);
+            await budgetService.delete(budget.id);
             showSuccess('Budget deleted');
           } catch (error) {
             showError('Failed to delete budget');

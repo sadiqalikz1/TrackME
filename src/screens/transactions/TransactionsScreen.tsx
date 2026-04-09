@@ -15,9 +15,9 @@ import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Input, Modal, Button, CategoryGrid, EmptyState } from '@/components/ui';
 import { TransactionItem } from '@/components/common';
 import { Transaction, TransactionCategory, TransactionType } from '@/types';
-import { getUserTransactions, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
+import { useData, useDataMutations } from '@/hooks';
+import { transactionService } from '@/services/dataService';
 import { COLLECTIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/utils/constants';
-import { parseCurrencyInput, isValidAmount } from '@/utils/formatters';
 
 type FilterType = 'all' | 'income' | 'expense';
 
@@ -28,8 +28,9 @@ const TransactionsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const route = useRoute();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Fetch transactions using offline-first hook
+  const { data: transactions, loading, refetch } = useData('transactions');
+
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -42,17 +43,6 @@ const TransactionsScreen: React.FC = () => {
   const [category, setCategory] = useState<TransactionCategory>('food');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const unsubscribe = getUserTransactions(user.uid, (data) => {
-      setTransactions(data);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
 
   // Handle opening add modal from navigation
   useEffect(() => {
@@ -77,7 +67,11 @@ const TransactionsScreen: React.FC = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const openAddModal = () => {
@@ -119,13 +113,15 @@ const TransactionsScreen: React.FC = () => {
       };
 
       if (editingTransaction) {
-        await updateDocument(COLLECTIONS.TRANSACTIONS, editingTransaction.id, transactionData);
+        await transactionService.update(editingTransaction.id, transactionData);
         showSuccess('Transaction updated');
       } else {
-        await createDocument(COLLECTIONS.TRANSACTIONS, transactionData);
+        await transactionService.create(transactionData);
         showSuccess('Transaction added');
       }
       
+      // Refresh data from local SQLite
+      await refetch();
       setModalVisible(false);
     } catch (error) {
       showError('Failed to save transaction');
@@ -145,8 +141,10 @@ const TransactionsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDocument(COLLECTIONS.TRANSACTIONS, transaction.id);
+              await transactionService.delete(transaction.id);
               showSuccess('Transaction deleted');
+              // Refresh data from local SQLite
+              await refetch();
             } catch (error) {
               showError('Failed to delete transaction');
             }

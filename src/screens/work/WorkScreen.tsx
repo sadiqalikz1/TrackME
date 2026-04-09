@@ -16,7 +16,8 @@ import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Input, Modal, Button, EmptyState } from '@/components/ui';
 import { WorkCard } from '@/components/common';
 import { Work, WorkCategory, WorkStatus } from '@/types';
-import { getUserWorks, createDocument, updateDocument, deleteDocument } from '@/services/firebase';
+import { getUserWorks } from '@/services/firebase';
+import { workService } from '@/services/dataService';
 import { COLLECTIONS, WORK_CATEGORIES, STATUS_COLORS, PROGRESS_STEPS } from '@/utils/constants';
 import { parseCurrencyInput, isValidAmount, calculateProfit, formatCurrency } from '@/utils/formatters';
 
@@ -143,10 +144,10 @@ const WorkScreen: React.FC = () => {
       }
 
       if (editingWork) {
-        await updateDocument(COLLECTIONS.WORKS, editingWork.id, workData);
+        await workService.update(editingWork.id, workData);
         showSuccess('Project updated');
       } else {
-        await createDocument(COLLECTIONS.WORKS, workData);
+        await workService.create(workData);
         showSuccess('Project created');
       }
 
@@ -172,7 +173,7 @@ const WorkScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDocument(COLLECTIONS.WORKS, editingWork.id);
+              await workService.delete(editingWork.id);
               showSuccess('Project deleted');
               setModalVisible(false);
             } catch (error) {

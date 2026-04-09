@@ -27,7 +27,8 @@ import {
   AdditionalWorkModal,
 } from '@/components/ui';
 import { Work, Transaction, TransactionCategory, DetailedExpense, TimeEntry, WorkPayment, AdditionalWork } from '@/types';
-import { getWorkById, updateDocument, deleteDocument, createDocument } from '@/services/firebase';
+import { getWorkById } from '@/services/firebase';
+import { workService, transactionService } from '@/services/dataService';
 import { WORK_CATEGORIES, STATUS_COLORS, COLLECTIONS, EXPENSE_TYPES } from '@/utils/constants';
 import { formatCurrency, formatDate, formatPercentage, calculateProfit } from '@/utils/formatters';
 
@@ -78,7 +79,7 @@ const WorkDetailScreen: React.FC = () => {
 
       if (!result.canceled && result.assets[0] && work) {
         const newPhotos = [...work.photos, result.assets[0].uri];
-        await updateDocument(COLLECTIONS.WORKS, work.id, { photos: newPhotos });
+        await workService.update(work.id, { photos: newPhotos });
         setWork({ ...work, photos: newPhotos });
         showSuccess('Photo added');
       }
@@ -96,7 +97,7 @@ const WorkDetailScreen: React.FC = () => {
         onPress: async () => {
           if (!work) return;
           const newPhotos = work.photos.filter((_, i) => i !== index);
-          await updateDocument(COLLECTIONS.WORKS, work.id, { photos: newPhotos });
+          await workService.update(work.id, { photos: newPhotos });
           setWork({ ...work, photos: newPhotos });
           showSuccess('Photo removed');
         },
@@ -113,7 +114,7 @@ const WorkDetailScreen: React.FC = () => {
         text: 'Complete',
         onPress: async () => {
           try {
-            await updateDocument(COLLECTIONS.WORKS, work.id, {
+            await workService.update(work.id, {
               status: 'completed',
               progress: 100,
               endDate: new Date(),
@@ -154,10 +155,10 @@ const WorkDetailScreen: React.FC = () => {
         workId: work.id,
       };
 
-      await createDocument(COLLECTIONS.TRANSACTIONS, transaction);
+      await transactionService.create(transaction);
 
       // Mark as transferred
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         isProfitTransferred: true,
         profitTransferredAmount: data.amount,
         profitTransferredDate: new Date(),
@@ -191,7 +192,7 @@ const WorkDetailScreen: React.FC = () => {
     const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
 
     try {
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         timeEntries,
         totalHoursWorked: totalHours,
       });
@@ -208,7 +209,7 @@ const WorkDetailScreen: React.FC = () => {
     const totalHours = timeEntries.reduce((sum, t) => sum + t.hoursWorked, 0);
 
     try {
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         timeEntries,
         totalHoursWorked: totalHours,
       });
@@ -249,7 +250,7 @@ const WorkDetailScreen: React.FC = () => {
         totalExpenses
       );
 
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         detailedExpenses,
         materialCost: materialTotal,
         transportationCost: transportTotal,
@@ -301,7 +302,7 @@ const WorkDetailScreen: React.FC = () => {
         totalExpenses
       );
 
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         detailedExpenses,
         materialCost: materialTotal,
         transportationCost: transportTotal,
@@ -339,7 +340,7 @@ const WorkDetailScreen: React.FC = () => {
     const totalPaymentsReceived = payments.reduce((sum, p) => sum + p.amount, 0);
 
     try {
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         payments,
         totalPaymentsReceived,
       });
@@ -356,7 +357,7 @@ const WorkDetailScreen: React.FC = () => {
     const totalPaymentsReceived = payments.reduce((sum, p) => sum + p.amount, 0);
 
     try {
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         payments,
         totalPaymentsReceived,
       });
@@ -378,7 +379,7 @@ const WorkDetailScreen: React.FC = () => {
     const totalAdditionalAmount = additionalWorks.reduce((sum, w) => sum + w.amount, 0);
 
     try {
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         additionalWorks,
         totalAdditionalAmount,
       });
@@ -395,7 +396,7 @@ const WorkDetailScreen: React.FC = () => {
     const totalAdditionalAmount = additionalWorks.reduce((sum, w) => sum + w.amount, 0);
 
     try {
-      await updateDocument(COLLECTIONS.WORKS, work.id, {
+      await workService.update(work.id, {
         additionalWorks,
         totalAdditionalAmount,
       });
@@ -415,7 +416,7 @@ const WorkDetailScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(COLLECTIONS.WORKS, workId);
+            await workService.delete(workId);
             showSuccess('Project deleted');
             navigation.goBack();
           } catch (error) {

@@ -15,7 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Button, QuotationModal, EmptyState } from '@/components/ui';
 import { Quotation } from '@/types';
-import { deleteDocument, createDocument, subscribeToCollection } from '@/services/firebase';
+import { quotationService } from '@/services/dataService';
+import { subscribeToCollection } from '@/services/firebase';
 import { COLLECTIONS, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
@@ -68,7 +69,7 @@ const QuotationsScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(COLLECTIONS.QUOTATIONS, id);
+            await quotationService.delete(id);
             setQuotations(quotations.filter(q => q.id !== id));
             showSuccess('Quotation deleted');
           } catch (error) {
@@ -264,7 +265,7 @@ const QuotationsScreen: React.FC = () => {
               ...quotation,
               uid: user!.uid,
             };
-            await createDocument(COLLECTIONS.QUOTATIONS, quoteData);
+            await quotationService.create(quoteData);
             showSuccess('Quotation created successfully!');
             setModalVisible(false);
             await loadQuotations();

@@ -13,7 +13,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
 import { Card, Button, Input, Modal } from '@/components/ui';
 import { Quotation } from '@/types';
-import { getQuotationById, updateDocument, deleteDocument } from '@/services/firebase';
+import { getQuotationById } from '@/services/firebase';
+import { quotationService } from '@/services/dataService';
 import { COLLECTIONS, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import * as Print from 'expo-print';
@@ -66,7 +67,7 @@ const QuotationDetailScreen: React.FC = () => {
   const handleUpdateStatus = async () => {
     if (!quotation) return;
     try {
-      await updateDocument(COLLECTIONS.QUOTATIONS, quotation.id, { status: editStatus });
+      await quotationService.update(quotation.id, { status: editStatus });
       setQuotation({ ...quotation, status: editStatus });
       setEditModalVisible(false);
       showSuccess('Status updated');
@@ -83,7 +84,7 @@ const QuotationDetailScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(COLLECTIONS.QUOTATIONS, quotation!.id);
+            await quotationService.delete(quotation!.id);
             showSuccess('Quotation deleted');
             navigation.goBack();
           } catch (error) {
@@ -134,7 +135,7 @@ const QuotationDetailScreen: React.FC = () => {
         total: subtotal + quotation.tax - quotation.discount,
       };
 
-      await updateDocument(COLLECTIONS.QUOTATIONS, quotation.id, {
+      await quotationService.update(quotation.id, {
         items: updatedItems,
         subtotal,
         total: updatedQuotation.total,
