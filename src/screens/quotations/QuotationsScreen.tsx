@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -62,6 +62,25 @@ const QuotationsScreen: React.FC = () => {
       },
     ]);
   };
+
+  // ✅ Memoize the handler to prevent modal re-renders from parent
+  const handleCreateQuotation = useCallback(
+    async (quotation: Omit<Quotation, 'id' | 'uid' | 'createdAt' | 'updatedAt'>) => {
+      try {
+        const quoteData = {
+          ...quotation,
+          uid: user!.uid,
+        };
+        await quotationService.create(quoteData);
+        showSuccess('Quotation created successfully!');
+        setModalVisible(false);
+        await refetch();
+      } catch (error) {
+        showError('Failed to create quotation');
+      }
+    },
+    [user, quotationService, refetch, showSuccess, showError]
+  );
 
   const filteredQuotations = quotations.filter(q => 
     selectedStatus === 'all' ? true : q.status === selectedStatus
@@ -237,20 +256,7 @@ const QuotationsScreen: React.FC = () => {
       <QuotationModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        onCreateQuotation={async (quotation) => {
-          try {
-            const quoteData = {
-              ...quotation,
-              uid: user!.uid,
-            };
-            await quotationService.create(quoteData);
-            showSuccess('Quotation created successfully!');
-            setModalVisible(false);
-            await refetch();
-          } catch (error) {
-            showError('Failed to create quotation');
-          }
-        }}
+        onCreateQuotation={handleCreateQuotation}
       />
     </View>
   );

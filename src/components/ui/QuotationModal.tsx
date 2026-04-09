@@ -31,7 +31,7 @@ interface QuoteItem {
   unitPrice: number;
 }
 
-export const QuotationModal: React.FC<QuotationModalProps> = ({
+export const QuotationModalComponent: React.FC<QuotationModalProps> = ({
   visible,
   onClose,
   onCreateQuotation,
@@ -391,6 +391,9 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
     </Modal>
   );
 };
+
+// ✅ Memoize component to prevent re-renders from parent prop changes
+export const QuotationModal = React.memo(QuotationModalComponent) as typeof QuotationModalComponent;
 
 const styles = StyleSheet.create({
   container: {

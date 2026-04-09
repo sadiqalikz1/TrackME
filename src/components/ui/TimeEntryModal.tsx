@@ -18,7 +18,7 @@ interface TimeEntryModalProps {
   onRemoveTime: (entryId: string) => Promise<void>;
 }
 
-export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
+const TimeEntryModalComponent: React.FC<TimeEntryModalProps> = ({
   visible,
   timeEntries,
   totalHours,
@@ -237,6 +237,9 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
     </Modal>
   );
 };
+
+// ✅ Memoize component to prevent re-renders from parent prop changes
+export const TimeEntryModal = React.memo(TimeEntryModalComponent) as typeof TimeEntryModalComponent;
 
 const styles = StyleSheet.create({
   container: {

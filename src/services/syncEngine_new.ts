@@ -1,7 +1,6 @@
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
-import NetInfo from '@react-native-community/netinfo';
 import { hybridRepository, syncWithStrategy as executeSyncStrategy, SyncStrategy } from './repositories/hybridRepository';
 import { database } from './database';
 
@@ -22,7 +21,6 @@ export class SyncEngine {
   private isSyncingAllowed: boolean = true;
   private isSyncEnabled: boolean = false; // Don't start syncing until user is authenticated
   private hasPerformedInitialSync: boolean = false; // Track if initial sync done on app startup
-  private netInfoUnsubscribe: (() => void) | null = null; // Unsubscribe function for NetInfo listener
 
   constructor() {
     this.lastNetworkState = hybridRepository.getNetworkStatus();
@@ -101,7 +99,7 @@ export class SyncEngine {
 
   /**
    * Monitor network state transitions (offline -> online)
-   * Uses NetInfo event listeners instead of polling for battery efficiency
+   * Triggers sync when device comes online
    */
   monitorNetworkState(): void {
     // Skip for guest users
@@ -109,26 +107,25 @@ export class SyncEngine {
       return;
     }
 
-    // Listen for actual network state changes (not polling)
-    this.netInfoUnsubscribe = NetInfo.addEventListener(state => {
-      const isCurrentlyOnline = (state.isConnected && state.isInternetReachable) ?? false;
+    // Check network status every 5 seconds
+    setInterval(async () => {
+      const isCurrentlyOnline = hybridRepository.getNetworkStatus();
 
       // Transition from offline to online detected
       if (!this.lastNetworkState && isCurrentlyOnline) {
         if (!hybridRepository.isGuestMode() && this.isSyncEnabled) {
           console.log('Device came online, triggering event-driven sync...');
-          this.performSync();
+          await this.performSync();
         }
       }
 
       this.lastNetworkState = isCurrentlyOnline;
-    });
+    }, 5000);
   }
 
   /**
    * Perform sync operation with retry logic
    * Only called on explicit events, never periodically
-   * ✅ Properly manages syncInProgress lock on both success and failure
    */
   private async performSync(retryCount: number = 0): Promise<void> {
     // Skip for guest users
@@ -155,8 +152,6 @@ export class SyncEngine {
       await hybridRepository.syncAll();
 
       console.log('Event-driven sync completed successfully');
-      // ✅ CRITICAL FIX: Release lock on success
-      this.syncInProgress = false;
     } catch (error) {
       console.error('Sync operation failed:', error);
 
@@ -166,13 +161,14 @@ export class SyncEngine {
         console.log(`Retrying sync in ${delayMs}ms...`);
 
         setTimeout(() => {
-          // ✅ Release lock before retry so the next attempt can acquire it
           this.syncInProgress = false;
           this.performSync(retryCount + 1);
         }, delayMs);
-      } else {
-        // ✅ CRITICAL FIX: Release lock after max retries exhausted
-        console.log('Sync failed after 3 retries, will sync on next event');
+
+        return;
+      }
+    } finally {
+      if (retryCount >= 3) {
         this.syncInProgress = false;
       }
     }
@@ -300,11 +296,6 @@ export class SyncEngine {
   destroy(): void {
     if (this.appStateSubscription) {
       this.appStateSubscription.remove();
-    }
-
-    // ✅ MEMORY LEAK FIX: Unsubscribe from NetInfo listener
-    if (this.netInfoUnsubscribe) {
-      this.netInfoUnsubscribe();
     }
 
     console.log('SyncEngine destroyed (event-driven mode)');
