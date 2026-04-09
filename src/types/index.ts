@@ -310,6 +310,7 @@ export type RootStackParamList = {
   Budgets: undefined;
   Goals: undefined;
   Quotations: undefined;
+  CreateQuotation: undefined;
   QuotationDetail: undefined;
   Analysis: undefined;
   Settings: undefined;
