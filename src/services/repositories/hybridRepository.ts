@@ -14,6 +14,9 @@ export class HybridRepository implements IRepository {
   private isOnline: boolean = false;
   private currentUid: string | null = null;
   private isGuestUser: boolean = false;
+  private isUserActionInProgress: boolean = false; // Flag to prevent sync during user actions
+  private lastSyncTimes: Map<string, number> = new Map(); // Track last sync time per collection
+  private readonly SYNC_DEBOUNCE_MS = 30000; // 30 seconds minimum between syncs per collection
 
   constructor() {
     this.initNetworkListener();
@@ -28,6 +31,24 @@ export class HybridRepository implements IRepository {
   setIsGuest(isGuest: boolean): void {
     this.isGuestUser = isGuest;
     console.log(`HybridRepository: Guest mode ${isGuest ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Set user action in progress flag
+   * When true, background sync is paused to avoid interrupting user
+   */
+  setUserActionInProgress(inProgress: boolean): void {
+    this.isUserActionInProgress = inProgress;
+    if (inProgress) {
+      console.log('HybridRepository: User action in progress, background sync paused');
+    }
+  }
+
+  /**
+   * Check if user action is in progress
+   */
+  isUserActionActive(): boolean {
+    return this.isUserActionInProgress;
   }
 
   private initNetworkListener(): void {
@@ -227,11 +248,9 @@ export class HybridRepository implements IRepository {
       // Always read from local first (faster, works offline)
       const localDocs = await localRepository.getCollection(collection);
 
-      if (this.isOnline) {
-        // Fetch from Firebase in background for sync
-        // (don't wait for it, return local data immediately)
-        this.syncCollectionInBackground(collection);
-      }
+      // NOTE: Background sync is now handled by SyncEngine on a schedule
+      // This prevents aggressive syncing on every read which causes UI flickering
+      // Do NOT call syncCollectionInBackground here
 
       return localDocs;
     } catch (error) {
@@ -331,14 +350,26 @@ export class HybridRepository implements IRepository {
    */
   private async syncCollectionInBackground(collection: CollectionName): Promise<void> {
     try {
+      // Skip if user action in progress (e.g., filling a form)
+      if (this.isUserActionInProgress) {
+        return;
+      }
+
       // Skip remote sync for guest users (local-only mode) - silent
       if (this.isGuestUser) {
         return;
       }
 
+      // Debounce: Skip if this collection was synced recently
+      const lastSync = this.lastSyncTimes.get(collection) || 0;
+      const now = Date.now();
+      if (now - lastSync < this.SYNC_DEBOUNCE_MS) {
+        return; // Already synced recently, skip silently
+      }
+      this.lastSyncTimes.set(collection, now);
+
       // Skip remote sync if uid not set yet
       if (!this.currentUid) {
-        console.log(`HybridRepository: Skipping remote sync for ${collection}, uid not set yet`);
         return;
       }
 
@@ -517,4 +548,13 @@ export async function syncWithStrategy(strategy: SyncStrategy): Promise<void> {
       await hybridRepository.pushLocalToCloud();
       break;
   }
+}
+
+/**
+ * Helper function to pause/resume background sync during user actions
+ * Call with true when user starts filling a form, false when done
+ * This prevents sync from interrupting user input
+ */
+export function setUserActionInProgress(inProgress: boolean): void {
+  hybridRepository.setUserActionInProgress(inProgress);
 }

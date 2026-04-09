@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts';
@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { DEFAULT_BANKS } from '@/utils/constants';
 import { TransactionCategory } from '@/types';
+import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
 
 interface ProfitTransferModalProps {
   visible: boolean;
@@ -30,6 +31,16 @@ export const ProfitTransferModal: React.FC<ProfitTransferModalProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategory>('work_profit');
   const [selectedBank, setSelectedBank] = useState(DEFAULT_BANKS[0].name);
   const [isTransferring, setIsTransferring] = useState(false);
+
+  // Pause background sync while user is filling the form
+  useEffect(() => {
+    if (visible) {
+      setUserActionInProgress(true);
+    }
+    return () => {
+      setUserActionInProgress(false);
+    };
+  }, [visible]);
 
   const incomeCategories: Array<{ category: TransactionCategory; label: string; icon: string }> = [
     { category: 'work_profit', label: 'Work Profit', icon: 'briefcase' },

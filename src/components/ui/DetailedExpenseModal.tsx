@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, useAuth } from '@/contexts';
@@ -8,6 +8,7 @@ import { Card } from './Card';
 import { DetailedExpense, ExpenseType } from '@/types';
 import { EXPENSE_TYPES, CURRENCIES } from '@/utils/constants';
 import { formatCurrency, formatDate } from '@/utils/formatters';
+import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
 
 const UNIT_OPTIONS = ['pcs', 'ft', 'm', 'kg', 'g', 'L', 'ml', 'hr', 'box', 'set'];
 
@@ -41,6 +42,16 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
   const [descriptionError, setDescriptionError] = useState(false);
   const [amountError, setAmountError] = useState(false);
   const [unitError, setUnitError] = useState(false);
+
+  // Pause background sync while user is filling the form
+  useEffect(() => {
+    if (visible) {
+      setUserActionInProgress(true);
+    }
+    return () => {
+      setUserActionInProgress(false);
+    };
+  }, [visible]);
 
   const handleAddExpense = async () => {
     const expenseAmount = parseFloat(amount) || 0;

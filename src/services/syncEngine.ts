@@ -73,16 +73,19 @@ export class SyncEngine {
     }
 
     if (state === 'active') {
-      console.log('App came to foreground, triggering sync...');
-      this.syncIfOnline();
+      // Only sync on foreground if no user action in progress
+      if (!hybridRepository.isUserActionActive()) {
+        console.log('App came to foreground, triggering sync...');
+        this.syncIfOnline();
+      }
     } else if (state === 'inactive' || state === 'background') {
       console.log('App went to background');
     }
   }
 
   /**
-   * Set up periodic sync every 60 seconds
-   * (Skipped silently for guest users)
+   * Set up periodic sync every 2 minutes
+   * (Skipped silently for guest users and when user action in progress)
    */
   private setupPeriodicSync(): void {
     this.syncTimer = setInterval(() => {
@@ -91,10 +94,15 @@ export class SyncEngine {
         return;
       }
 
+      // Skip if user action in progress (e.g., filling a form)
+      if (hybridRepository.isUserActionActive()) {
+        return;
+      }
+
       if (this.isSyncingAllowed && this.appState === 'active') {
         this.syncIfOnline();
       }
-    }, 60000); // Sync every 60 seconds
+    }, 120000); // Sync every 2 minutes (was 60 seconds)
   }
 
   /**
@@ -143,6 +151,12 @@ export class SyncEngine {
   private async performSync(retryCount: number = 0): Promise<void> {
     // Silent skip for guest users - no logging
     if (hybridRepository.isGuestMode()) {
+      return;
+    }
+
+    // Skip if user action in progress (e.g., filling a form)
+    if (hybridRepository.isUserActionActive()) {
+      console.log('User action in progress, deferring sync...');
       return;
     }
 

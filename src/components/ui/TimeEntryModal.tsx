@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts';
@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { TimeEntry } from '@/types';
 import { formatDate } from '@/utils/formatters';
+import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
 
 interface TimeEntryModalProps {
   visible: boolean;
@@ -32,7 +33,18 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
   const [description, setDescription] = useState('');
   const [adding, setAdding] = useState(false);
 
-  const calculateDuration = () => {
+  // Pause background sync while user is filling the form
+  useEffect(() => {
+    if (visible) {
+      setUserActionInProgress(true);
+    }
+    return () => {
+      setUserActionInProgress(false);
+    };
+  }, [visible]);
+
+  // Memoize duration calculation to prevent unnecessary re-renders
+  const durationMins = useMemo(() => {
     try {
       const [startH, startM] = startTime.split(':').map(Number);
       const [endH, endM] = endTime.split(':').map(Number);
@@ -42,11 +54,12 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
     } catch {
       return 0;
     }
-  };
+  }, [startTime, endTime]);
 
-  const handleAddTime = async () => {
-    const duration = calculateDuration();
-    if (duration <= 0) {
+  const calculateDuration = useCallback(() => durationMins, [durationMins]);
+
+  const handleAddTime = useCallback(async () => {
+    if (durationMins <= 0) {
       Alert.alert('Invalid Time', 'End time must be after start time');
       return;
     }
@@ -57,7 +70,7 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
         date,
         startTime,
         endTime,
-        duration,
+        duration: durationMins,
         description: description.trim() || 'Work',
       });
       setStartTime('09:00');
@@ -66,9 +79,9 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
     } finally {
       setAdding(false);
     }
-  };
+  }, [date, startTime, endTime, description, durationMins, onAddTime]);
 
-  const handleRemoveTime = (entryId: string) => {
+  const handleRemoveTime = useCallback((entryId: string) => {
     Alert.alert('Remove Time Entry', 'Delete this time entry?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -77,7 +90,7 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
         onPress: () => onRemoveTime(entryId),
       },
     ]);
-  };
+  }, [onRemoveTime]);
 
   return (
     <Modal visible={visible} title="Time Tracking" onClose={onClose}>

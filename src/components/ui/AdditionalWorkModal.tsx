@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Alert, ScrollView, TouchableOpacity, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, useAuth } from '@/contexts';
@@ -10,6 +10,7 @@ import { DateTimePicker } from './DateTimePicker';
 import { AdditionalWork } from '@/types';
 import { CURRENCIES } from '@/utils/constants';
 import { formatDate } from '@/utils/formatters';
+import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
 
 interface AdditionalWorkModalProps {
   visible: boolean;
@@ -38,6 +39,16 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
   const [descriptionError, setDescriptionError] = useState(false);
   const [amountError, setAmountError] = useState(false);
   const [dateTimePickerVisible, setDateTimePickerVisible] = useState(false);
+
+  // Pause background sync while user is filling the form
+  useEffect(() => {
+    if (visible) {
+      setUserActionInProgress(true);
+    }
+    return () => {
+      setUserActionInProgress(false);
+    };
+  }, [visible]);
 
   const totalAdditionalAmount = additionalWorks.reduce((sum, w) => sum + w.amount, 0);
 

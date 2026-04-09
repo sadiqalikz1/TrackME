@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { Card } from './Card';
 import { Quotation } from '@/types';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { CURRENCIES } from '@/utils/constants';
+import { setUserActionInProgress } from '@/services/repositories/hybridRepository';
 
 interface QuotationModalProps {
   visible: boolean;
@@ -58,12 +59,27 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
   const [creating, setCreating] = useState(false);
   const [expandItems, setExpandItems] = useState(true);
 
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const taxAmount = (subtotal * parseFloat(tax || '0')) / 100;
-  const discountAmount = parseFloat(discount || '0');
-  const total = subtotal + taxAmount - discountAmount;
+  // Pause background sync while user is filling the form
+  useEffect(() => {
+    if (visible) {
+      setUserActionInProgress(true);
+    }
+    return () => {
+      setUserActionInProgress(false);
+    };
+  }, [visible]);
 
-  const handleAddItem = () => {
+  // Memoize calculations to prevent unnecessary re-renders
+  const { subtotal, taxAmount, discountAmount, total } = useMemo(() => {
+    const sub = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const taxAmt = (sub * parseFloat(tax || '0')) / 100;
+    const discountAmt = parseFloat(discount || '0');
+    const tot = sub + taxAmt - discountAmt;
+    return { subtotal: sub, taxAmount: taxAmt, discountAmount: discountAmt, total: tot };
+  }, [items, tax, discount]);
+
+  // Memoize handlers to prevent unnecessary re-renders of child components
+  const handleAddItem = useCallback(() => {
     const price = parseFloat(itemUnitPrice) || 0;
     const qty = parseFloat(itemQuantity) || 1;
 
@@ -72,8 +88,8 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
       return;
     }
 
-    setItems([
-      ...items,
+    setItems(prev => [
+      ...prev,
       {
         name: itemName.trim(),
         quantity: qty,
@@ -84,13 +100,13 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
     setItemName('');
     setItemQuantity('1');
     setItemUnitPrice('');
-  };
+  }, [itemName, itemQuantity, itemUnitPrice]);
 
-  const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
-  };
+  const handleRemoveItem = useCallback((index: number) => {
+    setItems(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
-  const handleCreateQuotation = async () => {
+  const handleCreateQuotation = useCallback(async () => {
     if (!clientName.trim()) {
       Alert.alert('Missing Info', 'Please enter client name');
       return;
@@ -130,9 +146,9 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
     } finally {
       setCreating(false);
     }
-  };
+  }, [clientName, clientEmail, clientPhone, description, validDays, items, subtotal, taxAmount, discountAmount, total, onCreateQuotation, onClose]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setClientName('');
     setClientEmail('');
     setClientPhone('');
@@ -144,7 +160,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
     setItemName('');
     setItemQuantity('1');
     setItemUnitPrice('');
-  };
+  }, []);
 
   return (
     <Modal visible={visible} title="Create Quotation" onClose={onClose}>
