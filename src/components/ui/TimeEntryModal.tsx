@@ -177,49 +177,48 @@ export const TimeEntryModal: React.FC<TimeEntryModalProps> = ({
           <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 8 }]}>
             Recent Entries
           </Text>
-          <FlatList
-            data={timeEntries}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            ListEmptyComponent={
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No time entries yet
-              </Text>
-            }
-            renderItem={({ item }) => (
-              <Card
-                style={{
-                  marginBottom: 8,
-                  backgroundColor: colors.background,
-                  paddingVertical: 10,
-                }}
-              >
-                <View style={styles.entryHeader}>
-                  <View>
-                    <Text style={[styles.entryDate, { color: colors.text }]}>
-                      {formatDate(new Date(item.date), 'MMM d')}
-                    </Text>
-                    <Text style={[styles.entryTime, { color: colors.textSecondary }]}>
-                      {item.startTime} - {item.endTime}
-                    </Text>
+          {timeEntries.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No time entries yet
+            </Text>
+          ) : (
+            <View>
+              {timeEntries.map((item) => (
+                <Card
+                  key={item.id}
+                  style={{
+                    marginBottom: 8,
+                    backgroundColor: colors.background,
+                    paddingVertical: 10,
+                  }}
+                >
+                  <View style={styles.entryHeader}>
+                    <View>
+                      <Text style={[styles.entryDate, { color: colors.text }]}>
+                        {formatDate(new Date(item.date), 'MMM d')}
+                      </Text>
+                      <Text style={[styles.entryTime, { color: colors.textSecondary }]}>
+                        {item.startTime} - {item.endTime}
+                      </Text>
+                    </View>
+                    <View style={styles.entryRight}>
+                      <Text style={[styles.entryDuration, { color: colors.primary }]}>
+                        {(item.duration / 60).toFixed(1)}h
+                      </Text>
+                      <TouchableOpacity onPress={() => handleRemoveTime(item.id)}>
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <View style={styles.entryRight}>
-                    <Text style={[styles.entryDuration, { color: colors.primary }]}>
-                      {(item.duration / 60).toFixed(1)}h
+                  {item.description && (
+                    <Text style={[styles.entryDescription, { color: colors.textSecondary }]}>
+                      {item.description}
                     </Text>
-                    <TouchableOpacity onPress={() => handleRemoveTime(item.id)}>
-                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                {item.description && (
-                  <Text style={[styles.entryDescription, { color: colors.textSecondary }]}>
-                    {item.description}
-                  </Text>
-                )}
-              </Card>
-            )}
-          />
+                  )}
+                </Card>
+              ))}
+            </View>
+          )}
         </View>
       </View>
     </Modal>

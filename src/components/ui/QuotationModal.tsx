@@ -266,12 +266,10 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
               />
 
               {/* Items List */}
-              <FlatList
-                data={items}
-                keyExtractor={(_, index) => index.toString()}
-                scrollEnabled={false}
-                renderItem={({ item, index }) => (
+              <View>
+                {items.map((item, index) => (
                   <View
+                    key={index}
                     style={[
                       styles.itemRow,
                       { borderBottomColor: colors.border, backgroundColor: colors.background },
@@ -292,8 +290,8 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
                       </TouchableOpacity>
                     </View>
                   </View>
-                )}
-              />
+                ))}
+              </View>
             </>
           )}
         </Card>

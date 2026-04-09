@@ -90,20 +90,18 @@ const CardContextMenu: React.FC<CardContextMenuProps> = ({
               <View style={styles.menuHeader}>
                 <Text style={[styles.menuTitle, { color: colors.text }]}>Card Options</Text>
               </View>
-              <FlatList
-                scrollEnabled={false}
-                data={menuActions}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
+              <View>
+                {menuActions.map((item) => (
                   <TouchableOpacity
+                    key={item.id}
                     style={[styles.menuItem, { borderBottomColor: colors.border }]}
                     onPress={item.onPress}
                   >
                     <Ionicons name={item.icon as any} size={20} color={colors.primary} />
                     <Text style={[styles.menuItemText, { color: colors.text }]}>{item.label}</Text>
                   </TouchableOpacity>
-                )}
-              />
+                ))}
+              </View>
             </>
           ) : (
             <>

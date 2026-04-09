@@ -94,20 +94,20 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} title="Additional Works" onClose={onClose}>
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
-        {/* Total Summary */}
-        <Card style={{ backgroundColor: colors.warning + '15', marginBottom: 16 }}>
-          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-            Total Additional Amount
-          </Text>
-          <Text style={[styles.summaryValue, { color: colors.warning || '#f59e0b' }]}>
-            {currencyInfo.symbol}{totalAdditionalAmount.toFixed(2)}
-          </Text>
-        </Card>
+    <>
+      <Modal visible={visible} title="Additional Works" onClose={onClose}>
+      {/* Total Summary */}
+      <Card style={{ backgroundColor: colors.warning + '15', marginBottom: 16 }}>
+        <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+          Total Additional Amount
+        </Text>
+        <Text style={[styles.summaryValue, { color: colors.warning || '#f59e0b' }]}>
+          {currencyInfo.symbol}{totalAdditionalAmount.toFixed(2)}
+        </Text>
+      </Card>
 
-        {/* Add Work Section */}
-        <Card style={{ marginBottom: 16, padding: 12 }}>
+      {/* Add Work Section */}
+      <Card style={{ marginBottom: 16, padding: 12 }}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Add New Work</Text>
 
           {/* Description */}
@@ -188,12 +188,10 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
         {additionalWorks.length > 0 && (
           <Card style={{ marginBottom: 16, padding: 12 }}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Work History</Text>
-            <FlatList
-              data={additionalWorks}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              renderItem={({ item }) => (
+            <View>
+              {additionalWorks.map((item) => (
                 <View
+                  key={item.id}
                   style={[
                     styles.workRow,
                     { borderBottomColor: colors.border, backgroundColor: colors.background },
@@ -219,8 +217,8 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
                     </TouchableOpacity>
                   </View>
                 </View>
-              )}
-            />
+              ))}
+            </View>
           </Card>
         )}
 
@@ -232,7 +230,7 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
             </Text>
           </Card>
         )}
-      </ScrollView>
+      </Modal>
 
       {/* Date Time Picker Modal */}
       <DateTimePicker
@@ -245,7 +243,7 @@ export const AdditionalWorkModal: React.FC<AdditionalWorkModalProps> = ({
         showTime={false}
         title="Select Work Date"
       />
-    </Modal>
+    </>
   );
 };
 

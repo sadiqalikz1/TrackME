@@ -12,7 +12,7 @@ import {
   signUpWithEmail,
 } from '@/services/firebase';
 import { syncEngine } from '@/services/syncEngine';
-import { setHybridRepositoryUid, setHybridRepositoryGuest } from '@/services/repositories/hybridRepository';
+import { setHybridRepositoryUid, setHybridRepositoryGuest, clearGuestData } from '@/services/repositories/hybridRepository';
 import { User } from '@/types';
 import { STORAGE_KEYS } from '@/utils/constants';
 
@@ -195,6 +195,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         if (fbUser) {
           try {
+            // If user was previously in guest mode, clear guest data before switching to authenticated
+            if (isGuest) {
+              console.log('Clearing guest data before authenticating user...');
+              await clearGuestData();
+            }
+
             // Firebase auth succeeded, try to sync user document
             const userData = await setupUser(fbUser);
             setUser(userData);

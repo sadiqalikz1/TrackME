@@ -299,59 +299,58 @@ export const DetailedExpenseModal: React.FC<DetailedExpenseModalProps> = ({
           <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 8 }]}>
             Expense Entries ({expenses.length})
           </Text>
-          <FlatList
-            data={expenses}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            ListEmptyComponent={
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No expenses added yet
-              </Text>
-            }
-            renderItem={({ item }) => (
-              <Card
-                style={{
-                  marginBottom: 8,
-                  backgroundColor: colors.background,
-                  paddingVertical: 10,
-                }}
-              >
-                <View style={styles.expenseRow}>
-                  <Ionicons
-                    name={EXPENSE_TYPES[item.type].icon as any}
-                    size={20}
-                    color={EXPENSE_TYPES[item.type].color}
-                  />
-                  <View style={styles.expenseContent}>
-                    <Text style={[styles.expenseDesc, { color: colors.text }]}>
-                      {item.description}
-                    </Text>
-                    <View style={styles.expenseDetails}>
-                      <Text style={[styles.expenseType, { color: colors.textSecondary }]}>
-                        {EXPENSE_TYPES[item.type].label}
+          {expenses.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No expenses added yet
+            </Text>
+          ) : (
+            <View>
+              {expenses.map((item) => (
+                <Card
+                  key={item.id}
+                  style={{
+                    marginBottom: 8,
+                    backgroundColor: colors.background,
+                    paddingVertical: 10,
+                  }}
+                >
+                  <View style={styles.expenseRow}>
+                    <Ionicons
+                      name={EXPENSE_TYPES[item.type].icon as any}
+                      size={20}
+                      color={EXPENSE_TYPES[item.type].color}
+                    />
+                    <View style={styles.expenseContent}>
+                      <Text style={[styles.expenseDesc, { color: colors.text }]}>
+                        {item.description}
                       </Text>
-                      {item.quantity && (
+                      <View style={styles.expenseDetails}>
                         <Text style={[styles.expenseType, { color: colors.textSecondary }]}>
-                          • {item.quantity} {item.unit}
+                          {EXPENSE_TYPES[item.type].label}
                         </Text>
-                      )}
-                      <Text style={[styles.expenseDate, { color: colors.textSecondary }]}>
-                        • {formatDate(new Date(item.date), 'MMM d')}
+                        {item.quantity && (
+                          <Text style={[styles.expenseType, { color: colors.textSecondary }]}>
+                            • {item.quantity} {item.unit}
+                          </Text>
+                        )}
+                        <Text style={[styles.expenseDate, { color: colors.textSecondary }]}>
+                          • {formatDate(new Date(item.date), 'MMM d')}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.expenseRight}>
+                      <Text style={[styles.expenseAmount, { color: colors.danger }]}>
+                        {currencyInfo.symbol}{item.amount.toFixed(2)}
                       </Text>
+                      <TouchableOpacity onPress={() => handleRemoveExpense(item.id)}>
+                        <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                      </TouchableOpacity>
                     </View>
                   </View>
-                  <View style={styles.expenseRight}>
-                    <Text style={[styles.expenseAmount, { color: colors.danger }]}>
-                      {currencyInfo.symbol}{item.amount.toFixed(2)}
-                    </Text>
-                    <TouchableOpacity onPress={() => handleRemoveExpense(item.id)}>
-                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </Card>
-            )}
-          />
+                </Card>
+              ))}
+            </View>
+          )}
         </View>
       </View>
     </Modal>

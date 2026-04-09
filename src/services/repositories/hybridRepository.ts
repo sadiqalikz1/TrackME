@@ -51,6 +51,18 @@ export class HybridRepository implements IRepository {
     return this.isGuestUser;
   }
 
+  async clearGuestData(): Promise<void> {
+    if (!this.isGuestUser) return; // Only clear if currently in guest mode
+    
+    try {
+      console.log('HybridRepository: Clearing guest data from local database');
+      await database.clearAllData();
+      console.log('HybridRepository: Guest data cleared successfully');
+    } catch (error) {
+      console.error('HybridRepository: Error clearing guest data:', error);
+    }
+  }
+
   async getCollection(collection: CollectionName): Promise<any[]> {
     try {
       // Always read from local first (faster, works offline)
@@ -301,4 +313,12 @@ export function setHybridRepositoryUid(uid: string): void {
  */
 export function setHybridRepositoryGuest(isGuest: boolean): void {
   hybridRepository.setIsGuest(isGuest);
+}
+
+/**
+ * Helper function to clear guest data when transitioning to authenticated user
+ * Call this from AuthContext before logging in an authenticated user after guest mode
+ */
+export async function clearGuestData(): Promise<void> {
+  await hybridRepository.clearGuestData();
 }
