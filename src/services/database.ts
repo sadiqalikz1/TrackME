@@ -369,6 +369,44 @@ class Database {
     }
   }
 
+  /**
+   * Check if there is any local data in the database
+   * Used to determine if we need to show sync strategy modal
+   */
+  async hasLocalData(): Promise<boolean> {
+    const db = await this.getDatabase();
+
+    try {
+      const result = await db.getFirstAsync(
+        'SELECT COUNT(*) as count FROM documents WHERE operation != \'delete\''
+      );
+      const row = result as any;
+      return row?.count > 0;
+    } catch (error) {
+      console.error('Error checking for local data:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get count of local documents for a specific collection
+   */
+  async getLocalDataCount(collection: CollectionName): Promise<number> {
+    const db = await this.getDatabase();
+
+    try {
+      const result = await db.getFirstAsync(
+        'SELECT COUNT(*) as count FROM documents WHERE collection = ? AND operation != \'delete\'',
+        [collection]
+      );
+      const row = result as any;
+      return row?.count || 0;
+    } catch (error) {
+      console.error(`Error getting local data count for ${collection}:`, error);
+      return 0;
+    }
+  }
+
   async clearAllData(): Promise<void> {
     const db = await this.getDatabase();
 

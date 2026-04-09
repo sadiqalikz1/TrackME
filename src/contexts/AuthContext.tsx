@@ -12,7 +12,8 @@ import {
   signUpWithEmail,
 } from '@/services/firebase';
 import { syncEngine } from '@/services/syncEngine';
-import { setHybridRepositoryUid, setHybridRepositoryGuest, clearGuestData } from '@/services/repositories/hybridRepository';
+import { setHybridRepositoryUid, setHybridRepositoryGuest, clearGuestData, SyncStrategy, checkHasLocalData, checkHasCloudData } from '@/services/repositories/hybridRepository';
+import { database } from '@/services/database';
 import { User } from '@/types';
 import { STORAGE_KEYS } from '@/utils/constants';
 
@@ -28,6 +29,12 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   signupWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
+  // Sync strategy modal
+  showSyncModal: boolean;
+  localDataCount: number;
+  cloudDataExists: boolean;
+  handleSyncStrategy: (strategy: SyncStrategy) => Promise<void>;
+  dismissSyncModal: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,6 +58,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  
+  // Sync strategy modal state
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [pendingLoginUser, setPendingLoginUser] = useState<{ fbUser: FirebaseUser; userData: User } | null>(null);
+  const [localDataCount, setLocalDataCount] = useState(0);
+  const [cloudDataExists, setCloudDataExists] = useState(false);
+  const [isNewSignup, setIsNewSignup] = useState(false);
+  
   const MAX_RETRIES = 5;
   const CACHE_VALIDITY_DAYS = 7;
 
@@ -165,11 +180,79 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signupWithEmail = async (email: string, password: string, displayName: string = 'User'): Promise<void> => {
     try {
       console.log(`Attempting signup with email: ${email}`);
+      setIsNewSignup(true); // Mark as new signup to skip sync modal
       await signUpWithEmail(email, password);
       // onAuthChange listener will create user document and handle the rest
     } catch (error) {
+      setIsNewSignup(false); // Reset on error
       console.error('Signup failed:', error);
       throw error;
+    }
+  };
+  
+  /**
+   * Complete the login process after sync strategy is selected (or skipped)
+   */
+  const completeLogin = async (fbUser: FirebaseUser, userData: User): Promise<void> => {
+    setUser(userData);
+    await cacheUser(userData);
+    syncEngine.enableSync(); // Enable background sync now that user is authenticated
+    setIsOfflineMode(false); // Exit offline mode
+    setIsGuest(false); // User is authenticated, not a guest
+    setRetryCount(0);
+
+    // Pull all user collections from Firebase into local SQLite
+    try {
+      console.log('Fetching user data from Firebase...');
+      await syncEngine.manualSync();
+      console.log('User data synced successfully from Firebase');
+    } catch (error) {
+      console.warn('Initial sync after login failed, will retry in background:', error);
+    }
+    
+    setIsLoading(false);
+  };
+
+  /**
+   * Handle sync strategy selection from modal
+   */
+  const handleSyncStrategy = async (strategy: SyncStrategy): Promise<void> => {
+    if (!pendingLoginUser) {
+      console.error('No pending login user');
+      return;
+    }
+    
+    const { fbUser, userData } = pendingLoginUser;
+    
+    try {
+      console.log(`Applying sync strategy: ${strategy}`);
+      
+      // Execute the selected sync strategy
+      await syncEngine.syncWithStrategy(strategy);
+      
+      // Hide modal and complete login
+      setShowSyncModal(false);
+      setPendingLoginUser(null);
+      await completeLogin(fbUser, userData);
+      
+    } catch (error) {
+      console.error('Error applying sync strategy:', error);
+      // Still complete login, just with normal sync fallback
+      setShowSyncModal(false);
+      setPendingLoginUser(null);
+      await completeLogin(fbUser, userData);
+    }
+  };
+  
+  /**
+   * Dismiss sync modal without selecting a strategy (uses default merge)
+   */
+  const dismissSyncModal = () => {
+    if (pendingLoginUser) {
+      // Use merge as default when dismissing
+      handleSyncStrategy('merge');
+    } else {
+      setShowSyncModal(false);
     }
   };
 
@@ -203,33 +286,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             // Firebase auth succeeded, try to sync user document
             const userData = await setupUser(fbUser);
-            setUser(userData);
-            await cacheUser(userData);
-            setHybridRepositoryUid(fbUser.uid); // Enable uid filtering in repositories
-            syncEngine.enableSync(); // Enable background sync now that user is authenticated
-            setIsOfflineMode(false); // Exit offline mode
-            setIsGuest(false); // User is authenticated, not a guest
-            setHybridRepositoryGuest(false); // Ensure guest mode is disabled in repository
-            setRetryCount(0);
-
-            // ========== FETCH FIREBASE DATA AFTER LOGIN ==========
-            // Pull all user collections from Firebase into local SQLite
-            try {
-              console.log('Fetching user data from Firebase...');
-              await syncEngine.manualSync();
-              console.log('User data synced successfully from Firebase');
-            } catch (error) {
-              console.warn('Initial sync after login failed, will retry in background:', error);
+            if (!userData) {
+              throw new Error('Failed to setup user document');
             }
+            
+            // Set uid first so we can check cloud data
+            setHybridRepositoryUid(fbUser.uid);
+            setHybridRepositoryGuest(false);
+            
+            // Check if this is a returning user who needs sync strategy selection
+            // (skip for new signups - they have no cloud data yet)
+            const hasLocal = await checkHasLocalData();
+            const hasCloud = await checkHasCloudData();
+            
+            console.log(`Login check - Local data: ${hasLocal}, Cloud data: ${hasCloud}, New signup: ${isNewSignup}`);
+            
+            // Show sync modal for returning users with local data
+            // NEW SIGNUPS: Skip modal (no cloud data to compare)
+            // RETURNING USERS: Show modal if local data exists (let them choose how to merge)
+            if (!isNewSignup && hasLocal) {
+              console.log('Returning user with local data - showing sync strategy modal');
+              
+              // Get local data count for display
+              const count = await database.getLocalDataCount('transactions') +
+                           await database.getLocalDataCount('budgets') +
+                           await database.getLocalDataCount('work');
+              
+              setLocalDataCount(count);
+              setCloudDataExists(hasCloud);
+              setPendingLoginUser({ fbUser, userData });
+              setShowSyncModal(true);
+              setIsLoading(false); // Allow UI to render modal
+              return; // Wait for user to select sync strategy
+            }
+            
+            // No sync modal needed - complete login immediately
+            await completeLogin(fbUser, userData);
+            
           } catch (error) {
             console.error('Error syncing with Firebase:', error);
             // Firebase sync failed, but keep using cached user
             if (cachedUser && !isCachedUserStale(cachedUser)) {
               setIsOfflineMode(true); // Enter offline mode
               setUser(cachedUser);
-              const isGuest = cachedUser.uid.startsWith('guest_');
-              setIsGuest(isGuest);
-              setHybridRepositoryGuest(isGuest); // Sync guest flag with repository
+              const isGuestUser = cachedUser.uid.startsWith('guest_');
+              setIsGuest(isGuestUser);
+              setHybridRepositoryGuest(isGuestUser); // Sync guest flag with repository
               console.log('Switched to offline mode with cached user');
             } else {
               // Cached user is stale/missing, must re-login
@@ -238,6 +340,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setIsGuest(false);
               setHybridRepositoryGuest(false); // Ensure guest mode is disabled
             }
+          } finally {
+            setIsNewSignup(false); // Reset flag after processing
           }
         } else {
           // Firebase logged out
@@ -309,6 +413,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setFirebaseUser(null);
       syncEngine.disableSync();
       
+      // SECURITY: Clear ALL local data on logout
+      // This prevents next user from accessing previous user's data
+      console.log('Clearing local database data...');
+      await database.clearAllData();
+      console.log('Local data cleared successfully');
+      
       // Create new guest user for continued offline use
       const guestUser = await createGuestUser();
       setUser(guestUser);
@@ -369,6 +479,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshUser,
     loginWithEmail,
     signupWithEmail,
+    // Sync strategy modal
+    showSyncModal,
+    localDataCount,
+    cloudDataExists,
+    handleSyncStrategy,
+    dismissSyncModal,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

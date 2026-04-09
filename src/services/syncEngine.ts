@@ -1,7 +1,7 @@
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
-import { hybridRepository } from './repositories/hybridRepository';
+import { hybridRepository, syncWithStrategy as executeSyncStrategy, SyncStrategy } from './repositories/hybridRepository';
 import { database } from './database';
 
 const BACKGROUND_SYNC_TASK = 'background-sync-task';
@@ -267,6 +267,44 @@ export class SyncEngine {
   resumeSync(): void {
     this.isSyncingAllowed = true;
     console.log('Sync resumed');
+  }
+
+  /**
+   * Execute sync with specified strategy
+   * Called after user selects a sync strategy on login
+   */
+  async syncWithStrategy(strategy: SyncStrategy): Promise<void> {
+    if (!hybridRepository.getNetworkStatus()) {
+      throw new Error('Cannot sync while offline');
+    }
+
+    this.syncInProgress = true;
+    console.log(`Executing sync with strategy: ${strategy}`);
+
+    try {
+      await executeSyncStrategy(strategy);
+      this.lastSyncTime = Date.now();
+      console.log(`Sync with strategy ${strategy} completed successfully`);
+    } catch (error) {
+      console.error(`Sync with strategy ${strategy} failed:`, error);
+      throw error;
+    } finally {
+      this.syncInProgress = false;
+    }
+  }
+
+  /**
+   * Check if local data exists (for showing sync modal)
+   */
+  async hasLocalData(): Promise<boolean> {
+    return await hybridRepository.hasLocalData();
+  }
+
+  /**
+   * Check if cloud data exists (for showing sync modal)
+   */
+  async hasCloudData(): Promise<boolean> {
+    return await hybridRepository.hasCloudData();
   }
 
   /**

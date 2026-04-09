@@ -63,6 +63,165 @@ export class HybridRepository implements IRepository {
     }
   }
 
+  /**
+   * Clear all local data (for "Use Cloud Only" strategy)
+   * Used when user wants to discard local data and use cloud data
+   */
+  async clearLocalData(): Promise<void> {
+    try {
+      console.log('HybridRepository: Clearing all local data');
+      await database.clearAllData();
+      console.log('HybridRepository: Local data cleared successfully');
+    } catch (error) {
+      console.error('HybridRepository: Error clearing local data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Pull cloud data only (for "Use Cloud Only" strategy)
+   * Clears local data first, then pulls all data from cloud
+   */
+  async pullCloudOnly(): Promise<void> {
+    if (!this.isOnline) {
+      throw new Error('Cannot pull cloud data while offline');
+    }
+
+    if (!this.currentUid) {
+      throw new Error('User uid not set');
+    }
+
+    try {
+      console.log('HybridRepository: Starting pullCloudOnly sync');
+      
+      // Step 1: Clear all local data
+      await this.clearLocalData();
+
+      // Step 2: Pull all collections from cloud (users managed separately)
+      const collections = ['transactions', 'budgets', 'goals', 'work', 'quotations', 'billReminders'] as const;
+
+      for (const collection of collections) {
+        try {
+          const remoteDocs = await remoteRepository.getCollection(collection);
+          console.log(`HybridRepository: Pulled ${remoteDocs.length} documents from ${collection}`);
+          
+          for (const doc of remoteDocs) {
+            await localRepository.saveDocument(collection, doc.id, doc);
+            await database.markDocumentSynced(collection, doc.id);
+          }
+        } catch (error) {
+          console.error(`HybridRepository: Failed to pull ${collection}:`, error);
+        }
+      }
+
+      console.log('HybridRepository: pullCloudOnly completed');
+    } catch (error) {
+      console.error('HybridRepository: Error in pullCloudOnly:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Push local data to cloud (for "Push Local to Cloud" strategy)
+   * Clears cloud data first, then pushes all local data
+   */
+  async pushLocalToCloud(): Promise<void> {
+    if (!this.isOnline) {
+      throw new Error('Cannot push to cloud while offline');
+    }
+
+    if (!this.currentUid) {
+      throw new Error('User uid not set');
+    }
+
+    try {
+      console.log('HybridRepository: Starting pushLocalToCloud sync');
+
+      const collections = ['transactions', 'budgets', 'goals', 'work', 'quotations', 'billReminders'] as const;
+
+      for (const collection of collections) {
+        try {
+          // Step 1: Clear cloud data for this collection
+          await remoteRepository.clearUserData(collection);
+
+          // Step 2: Get all local documents
+          const localDocs = await localRepository.getCollection(collection);
+          console.log(`HybridRepository: Pushing ${localDocs.length} documents to ${collection}`);
+
+          // Step 3: Push each local document to cloud
+          for (const doc of localDocs) {
+            // Add uid to document if not present
+            const docWithUid = { ...doc, uid: this.currentUid };
+            await remoteRepository.saveDocument(collection, doc.id, docWithUid);
+            await database.markDocumentSynced(collection, doc.id);
+          }
+        } catch (error) {
+          console.error(`HybridRepository: Failed to push ${collection}:`, error);
+        }
+      }
+
+      console.log('HybridRepository: pushLocalToCloud completed');
+    } catch (error) {
+      console.error('HybridRepository: Error in pushLocalToCloud:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Merge local and cloud data (for "Merge Data" strategy)
+   * Uses last-write-wins conflict resolution
+   */
+  async mergeData(): Promise<void> {
+    if (!this.isOnline) {
+      throw new Error('Cannot merge data while offline');
+    }
+
+    if (!this.currentUid) {
+      throw new Error('User uid not set');
+    }
+
+    try {
+      console.log('HybridRepository: Starting mergeData sync');
+
+      // Use existing syncAll which performs last-write-wins merge
+      await this.syncAll();
+
+      console.log('HybridRepository: mergeData completed');
+    } catch (error) {
+      console.error('HybridRepository: Error in mergeData:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if there is any local data
+   */
+  async hasLocalData(): Promise<boolean> {
+    return await database.hasLocalData();
+  }
+
+  /**
+   * Check if cloud has any user data
+   */
+  async hasCloudData(): Promise<boolean> {
+    if (!this.isOnline || !this.currentUid) {
+      return false;
+    }
+
+    try {
+      // Check primary collections
+      const collections = ['transactions', 'budgets', 'goals', 'work'] as const;
+      for (const collection of collections) {
+        const hasData = await remoteRepository.hasUserData(collection);
+        if (hasData) return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('HybridRepository: Error checking cloud data:', error);
+      return false;
+    }
+  }
+
   async getCollection(collection: CollectionName): Promise<any[]> {
     try {
       // Always read from local first (faster, works offline)
@@ -283,9 +442,10 @@ export class HybridRepository implements IRepository {
 
   /**
    * Sync all collections
+   * Note: 'users' collection is managed separately in AuthContext
    */
   async syncAll(): Promise<void> {
-    const collections = ['users', 'transactions', 'budgets', 'goals', 'work', 'quotations', 'billReminders'] as const;
+    const collections = ['transactions', 'budgets', 'goals', 'work', 'quotations', 'billReminders'] as const;
 
     for (const collection of collections) {
       try {
@@ -321,4 +481,40 @@ export function setHybridRepositoryGuest(isGuest: boolean): void {
  */
 export async function clearGuestData(): Promise<void> {
   await hybridRepository.clearGuestData();
+}
+
+/**
+ * Helper function to check if local data exists
+ */
+export async function checkHasLocalData(): Promise<boolean> {
+  return await hybridRepository.hasLocalData();
+}
+
+/**
+ * Helper function to check if cloud data exists
+ */
+export async function checkHasCloudData(): Promise<boolean> {
+  return await hybridRepository.hasCloudData();
+}
+
+/**
+ * Sync strategy type
+ */
+export type SyncStrategy = 'cloud_only' | 'merge' | 'push_local';
+
+/**
+ * Execute sync with specified strategy
+ */
+export async function syncWithStrategy(strategy: SyncStrategy): Promise<void> {
+  switch (strategy) {
+    case 'cloud_only':
+      await hybridRepository.pullCloudOnly();
+      break;
+    case 'merge':
+      await hybridRepository.mergeData();
+      break;
+    case 'push_local':
+      await hybridRepository.pushLocalToCloud();
+      break;
+  }
 }

@@ -31,6 +31,15 @@ export class RemoteRepository implements IRepository {
   async getCollection(collectionName: CollectionName): Promise<any[]> {
     try {
       const db = getFirebaseDb();
+      
+      // Special handling for users collection - document ID is the uid
+      // Firestore rules: allow read: if request.auth.uid == userId
+      if (collectionName === 'users') {
+        if (!this.currentUid) return [];
+        const userDoc = await this.getDocument('users', this.currentUid);
+        return userDoc ? [userDoc] : [];
+      }
+      
       const collRef = collection(db, collectionName);
 
       // Filter by uid + non-deleted documents (required for Firestore security rules)
@@ -112,6 +121,65 @@ export class RemoteRepository implements IRepository {
     } catch (error) {
       console.error(`RemoteRepository: Error deleting ${collectionName}/${id}:`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Clear all user data from a collection (soft delete all documents)
+   * Used when user chooses "Push Local to Cloud" strategy
+   */
+  async clearUserData(collectionName: CollectionName): Promise<void> {
+    if (!this.currentUid) {
+      console.warn('RemoteRepository: Cannot clear user data, uid not set');
+      return;
+    }
+
+    try {
+      const db = getFirebaseDb();
+      const collRef = collection(db, collectionName);
+      const q = query(
+        collRef,
+        where('uid', '==', this.currentUid),
+        where('deletedAt', '==', null)
+      );
+      const snapshot = await getDocs(q);
+
+      // Soft delete all documents
+      const deletePromises = snapshot.docs.map(docSnapshot =>
+        updateDoc(doc(db, collectionName, docSnapshot.id), {
+          deletedAt: Timestamp.now(),
+        })
+      );
+
+      await Promise.all(deletePromises);
+      console.log(`RemoteRepository: Cleared ${snapshot.docs.length} documents from ${collectionName}`);
+    } catch (error) {
+      console.error(`RemoteRepository: Error clearing user data from ${collectionName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user has any data in a collection
+   */
+  async hasUserData(collectionName: CollectionName): Promise<boolean> {
+    if (!this.currentUid) {
+      return false;
+    }
+
+    try {
+      const db = getFirebaseDb();
+      const collRef = collection(db, collectionName);
+      const q = query(
+        collRef,
+        where('uid', '==', this.currentUid),
+        where('deletedAt', '==', null)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.length > 0;
+    } catch (error) {
+      console.error(`RemoteRepository: Error checking user data in ${collectionName}:`, error);
+      return false;
     }
   }
 }
