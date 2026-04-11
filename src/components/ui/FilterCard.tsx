@@ -41,6 +41,7 @@ const FilterCard: React.FC<FilterCardProps> = ({
 }) => {
   const { colors } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
+  const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [tempStartDate, setTempStartDate] = useState(config.startDate);
   const [tempEndDate, setTempEndDate] = useState(config.endDate);
 
@@ -67,15 +68,12 @@ const FilterCard: React.FC<FilterCardProps> = ({
     <>
       {/* Filter Card */}
       <Card style={[styles.filterCard, { backgroundColor: colors.card, borderColor: colors.border }] as any}>
-        <TouchableOpacity
-          onPress={() => {
-            setTempStartDate(config.startDate);
-            setTempEndDate(config.endDate);
-            setModalVisible(true);
-          }}
-          style={styles.filterCardHeader as any}
-        >
-          <View style={styles.filterInfo as any}>
+        <View style={styles.filterCardHeader as any}>
+          {/* Toggle Filter Visibility */}
+          <TouchableOpacity
+            onPress={() => setIsFilterVisible(!isFilterVisible)}
+            style={styles.filterInfo as any}
+          >
             <Ionicons name="funnel" size={18} color={colors.primary} />
             <Text style={[styles.filterLabel, { color: colors.text }] as any}>{filterLabel}</Text>
             {resultCount !== undefined && (
@@ -83,34 +81,54 @@ const FilterCard: React.FC<FilterCardProps> = ({
                 {resultCount}
               </Text>
             )}
-          </View>
-          <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
+          </TouchableOpacity>
 
-        {/* Quick View */}
-        <View style={styles.quickView as any}>
-          {/* Search Input */}
-          <View style={{ marginBottom: 8 }}>
-            <Input
-              placeholder="Search..."
-              value={config.searchQuery}
-              onChangeText={(text) => onConfigChange({ ...config, searchQuery: text })}
-              style={{ height: 36 }}
-            />
-          </View>
+          {/* Advanced Filters Button */}
+          <TouchableOpacity
+            onPress={() => {
+              setTempStartDate(config.startDate);
+              setTempEndDate(config.endDate);
+              setModalVisible(true);
+            }}
+            style={styles.advancedFilterButton as any}
+          >
+            <Ionicons name="settings" size={18} color={colors.primary} />
+          </TouchableOpacity>
 
-          {/* Date Range Display */}
-          <View style={styles.dateDisplay as any}>
-            <Text style={[styles.dateLabel, { color: colors.textSecondary }] as any}>
-              {config.startDate} → {config.endDate}
-            </Text>
-            {!isDefaultRange() && (
-              <TouchableOpacity onPress={handleResetDates}>
-                <Text style={[styles.resetLink, { color: colors.primary }] as any}>Reset</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Toggle Icon */}
+          <Ionicons
+            name={isFilterVisible ? 'chevron-up' : 'chevron-down'}
+            size={20}
+            color={colors.textSecondary}
+          />
         </View>
+
+        {/* Quick View - Conditionally Rendered */}
+        {isFilterVisible && (
+          <View style={styles.quickView as any}>
+            {/* Search Input */}
+            <View style={{ marginBottom: 8 }}>
+              <Input
+                placeholder="Search..."
+                value={config.searchQuery}
+                onChangeText={(text) => onConfigChange({ ...config, searchQuery: text })}
+                style={{ height: 36 }}
+              />
+            </View>
+
+            {/* Date Range Display */}
+            <View style={styles.dateDisplay as any}>
+              <Text style={[styles.dateLabel, { color: colors.textSecondary }] as any}>
+                {config.startDate} → {config.endDate}
+              </Text>
+              {!isDefaultRange() && (
+                <TouchableOpacity onPress={handleResetDates}>
+                  <Text style={[styles.resetLink, { color: colors.primary }] as any}>Reset</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
       </Card>
 
       {/* Filter Modal */}
@@ -248,6 +266,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  advancedFilterButton: {
+    padding: 8,
+    marginRight: 8,
   },
   filterInfo: {
     flexDirection: 'row',
