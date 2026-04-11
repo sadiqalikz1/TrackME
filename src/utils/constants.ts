@@ -219,7 +219,7 @@ export const COLLECTIONS = {
 // App Configuration
 export const APP_CONFIG = {
   APP_NAME: 'TrackME',
-  VERSION: '1.0.1',
+  VERSION: '1.0.2',
   MAX_BUDGET_CATEGORIES: 10,
   MAX_GOALS: 20,
   DEFAULT_BUDGET_ALERT: 80, // percentage

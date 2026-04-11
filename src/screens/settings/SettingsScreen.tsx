@@ -308,7 +308,7 @@ const SettingsScreen: React.FC = () => {
           <SettingRow
             icon="information-circle-outline"
             title="App Version"
-            subtitle="1.0.0"
+            subtitle="1.0.2"
           />
           <SettingRow
             icon="document-text-outline"
