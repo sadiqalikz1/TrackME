@@ -180,7 +180,7 @@ const WorkScreen: React.FC = () => {
   };
 
   const openWorkDetail = (work: Work) => {
-    (navigation as any).navigate('WorkDetail', { workId: work.id });
+    (navigation as any).navigate('WorkDetailsPage', { workId: work.id });
   };
 
   const renderStatusFilter = (filterStatus: WorkStatus | 'all', label: string) => {

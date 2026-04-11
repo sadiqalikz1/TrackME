@@ -96,7 +96,7 @@ const DashboardScreen: React.FC = () => {
           <BudgetStatusCard budgets={budgets} transactions={transactions} currency={currency} customColor={customColor} />
         )}
         {cardId === 'workOverview' && (
-          <WorkOverviewCard works={works} customColor={customColor} onWorkPress={(work) => (navigation as any).navigate('WorkDetail', { workId: work.id })} />
+          <WorkOverviewCard works={works} customColor={customColor} onWorkPress={(work) => (navigation as any).navigate('WorkDetailsPage', { workId: work.id })} />
         )}
         {cardId === 'netWorth' && (
           <NetWorthCard transactions={transactions} currency={currency} customColor={customColor} />

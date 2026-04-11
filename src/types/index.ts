@@ -306,6 +306,7 @@ export type RootStackParamList = {
   Transactions: undefined;
   Work: undefined;
   WorkDetail: { workId: string };
+  WorkDetailsPage: { workId: string };
   MoreMenu: undefined;
   BankAccounts: undefined;
   Budgets: undefined;

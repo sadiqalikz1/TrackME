@@ -22,6 +22,7 @@ import TransactionsScreen from '@/screens/transactions/TransactionsScreen';
 import WorkScreen from '@/screens/work/WorkScreen';
 import WorkDashboardScreen from '@/screens/work/WorkDashboardScreen';
 import WorkDetailScreen from '@/screens/work/WorkDetailScreen';
+import WorkDetailsPage from '@/screens/work/WorkDetailsPage';
 import MoreMenuScreen from '@/screens/more/MoreMenuScreen';
 import BankAccountsScreen from '@/screens/more/BankAccountsScreen';
 import BudgetsScreen from '@/screens/budgets/BudgetsScreen';
@@ -53,6 +54,7 @@ const WorkStackNavigator = () => {
       <WorkStack.Screen name="WorkDashboard" component={WorkDashboardScreen} />
       <WorkStack.Screen name="WorkMain" component={WorkScreen} />
       <WorkStack.Screen name="WorkDetail" component={WorkDetailScreen} />
+      <WorkStack.Screen name="WorkDetailsPage" component={WorkDetailsPage} />
     </WorkStack.Navigator>
   );
 };

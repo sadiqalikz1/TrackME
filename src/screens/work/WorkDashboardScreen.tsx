@@ -106,7 +106,7 @@ const WorkDashboardScreen: React.FC = () => {
   }, [works]);
 
   const handleProjectTap = (workId: string) => {
-    (navigation as any).navigate('WorkDetail', { workId });
+    (navigation as any).navigate('WorkDetailsPage', { workId });
   };
 
   const StatCard: React.FC<{

@@ -49,6 +49,13 @@ const WorkOverviewCard: React.FC<WorkOverviewCardProps> = ({ works, customColor,
     }
   };
 
+  const getBalanceColor = (work: Work) => {
+    const remainingBalance = work.quotationAmount + work.totalAdditionalAmount - work.totalPaymentsReceived;
+    if (remainingBalance <= 0) return colors.success; // Green - settled
+    if (remainingBalance <= work.quotationAmount * 0.25) return colors.warning; // Yellow - small balance
+    return colors.danger; // Red - large balance
+  };
+
   const cardStyle = customColor ? { backgroundColor: customColor } : {};
 
   return (
@@ -76,6 +83,13 @@ const WorkOverviewCard: React.FC<WorkOverviewCardProps> = ({ works, customColor,
                 </Text>
                 <Text style={[styles.workCategory, { color: colors.textMuted }]} numberOfLines={1}>
                   {item.category}
+                </Text>
+              </View>
+              <View style={styles.balanceContainer}>
+                <Text style={[styles.balanceAmount, { color: getBalanceColor(item) }]}>
+                  {item.quotationAmount + item.totalAdditionalAmount - item.totalPaymentsReceived > 0
+                    ? `$${(item.quotationAmount + item.totalAdditionalAmount - item.totalPaymentsReceived).toFixed(2)}`
+                    : 'Settled'}
                 </Text>
               </View>
               <View style={styles.workStatus}>
@@ -140,6 +154,14 @@ const styles = StyleSheet.create({
   },
   workStatus: {
     alignItems: 'flex-end',
+  },
+  balanceContainer: {
+    alignItems: 'flex-end',
+    minWidth: 80,
+  },
+  balanceAmount: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   statusBadge: {
     flexDirection: 'row',

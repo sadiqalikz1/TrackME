@@ -77,7 +77,7 @@ const BankAccountsScreen: React.FC = () => {
       setNameError(false);
     }
 
-    if (!isValidAmount(balanceNum)) {
+    if (balanceNum === null || balanceNum === undefined || isNaN(balanceNum)) {
       setBalanceError(true);
       hasError = true;
     } else {
