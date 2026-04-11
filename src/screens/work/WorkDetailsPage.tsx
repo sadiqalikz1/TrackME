@@ -436,9 +436,9 @@ const WorkDetailsPage: React.FC = () => {
   const category = WORK_CATEGORIES[work.category];
   const status = STATUS_COLORS[work.status];
 
-  // Calculate balance
-  const totalRevenue = work.quotationAmount + work.totalAdditionalAmount;
-  const balanceAmount = totalRevenue - work.totalPaymentsReceived;
+  // Calculate balance - ensure all values are numbers
+  const totalRevenue = (work.quotationAmount || 0) + (work.totalAdditionalAmount || 0);
+  const balanceAmount = totalRevenue - (work.totalPaymentsReceived || 0);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -499,13 +499,30 @@ const WorkDetailsPage: React.FC = () => {
             </Text>
           </View>
 
-          {/* Work Taken Amount */}
+          {/* Work Taken Amount - Total Payments Breakdown */}
           <View style={styles.summarySection}>
-            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Work Taken Amount</Text>
+            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Payments Received</Text>
             <Text style={[styles.summaryValue, { color: colors.text }]}>
               {formatCurrency(work.totalPaymentsReceived, currency)}
             </Text>
           </View>
+
+          {/* Payment Breakdown */}
+          {work.payments && work.payments.length > 0 && (
+            <View style={styles.paymentBreakdown}>
+              <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Payment Breakdown:</Text>
+              {work.payments.map((payment, idx) => (
+                <View key={idx} style={styles.paymentItemRow}>
+                  <Text style={[styles.paymentType, { color: colors.textSecondary }]}>
+                    {payment.type.charAt(0).toUpperCase() + payment.type.slice(1)}
+                  </Text>
+                  <Text style={[styles.paymentAmount, { color: colors.success }]}>
+                    {formatCurrency(payment.amount, currency)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Extra Works Items List */}
           {work.totalAdditionalAmount > 0 && (
@@ -933,6 +950,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginVertical: 8,
     textTransform: 'uppercase',
+  },
+  paymentBreakdown: {
+    marginVertical: 12,
+    paddingVertical: 8,
+  },
+  breakdownLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  paymentItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingLeft: 8,
+  },
+  paymentType: {
+    fontSize: 12,
+  },
+  paymentAmount: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   extraWorkItem: {
     flexDirection: 'row',

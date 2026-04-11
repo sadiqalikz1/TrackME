@@ -182,6 +182,13 @@ const WorkDashboardScreen: React.FC = () => {
 
         <View style={styles.projectCardBody as any}>
           <View style={styles.projectItem as any}>
+            <Text style={[styles.projectItemLabel, { color: colors.textSecondary }] as any}>Quotation</Text>
+            <Text style={[styles.projectItemValue, { color: colors.text }] as any}>
+              {currencyInfo.symbol}{(project.quotationAmount || 0).toFixed(2)}
+            </Text>
+          </View>
+          <View style={styles.projectDivider as any} />
+          <View style={styles.projectItem as any}>
             <Text style={[styles.projectItemLabel, { color: colors.textSecondary }] as any}>Income</Text>
             <Text style={[styles.projectItemValue, { color: colors.success }] as any}>
               {currencyInfo.symbol}{(project.totalPaymentsReceived || 0).toFixed(2)}
@@ -192,18 +199,6 @@ const WorkDashboardScreen: React.FC = () => {
             <Text style={[styles.projectItemLabel, { color: colors.textSecondary }] as any}>Expenses</Text>
             <Text style={[styles.projectItemValue, { color: colors.danger }] as any}>
               {currencyInfo.symbol}{(project.expenses || 0).toFixed(2)}
-            </Text>
-          </View>
-          <View style={styles.projectDivider as any} />
-          <View style={styles.projectItem as any}>
-            <Text style={[styles.projectItemLabel, { color: colors.textSecondary }] as any}>Profit</Text>
-            <Text
-              style={[
-                styles.projectItemValue,
-                { color: (project.profit || 0) >= 0 ? colors.success : colors.danger },
-              ] as any}
-            >
-              {currencyInfo.symbol}{(project.profit || 0).toFixed(2)}
             </Text>
           </View>
         </View>
@@ -349,17 +344,6 @@ const WorkDashboardScreen: React.FC = () => {
               subtext="per project"
               color={colors.success}
             />
-          </View>
-        </View>
-
-        {/* Project Status Breakdown */}
-        <View style={styles.section as any}>
-          <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Project Status</Text>
-          <View style={styles.statusGrid as any}>
-            <StatusBadge status="pending" count={stats.pending} />
-            <StatusBadge status="in-progress" count={stats.inProgress} />
-            <StatusBadge status="completed" count={stats.completed} />
-            <StatusBadge status="cancelled" count={stats.cancelled} />
           </View>
         </View>
 
