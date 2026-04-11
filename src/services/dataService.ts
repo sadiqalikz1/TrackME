@@ -156,6 +156,31 @@ export const billReminderService = {
   },
 };
 
+// Bank Accounts
+export const bankAccountService = {
+  async getAll() {
+    return hybridRepository.getCollection('bankAccounts');
+  },
+
+  async getById(id: string) {
+    return hybridRepository.getDocument('bankAccounts', id);
+  },
+
+  async create(data: any) {
+    const id = `account_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await hybridRepository.saveDocument('bankAccounts', id, { ...data, id });
+    return id;
+  },
+
+  async update(id: string, data: any) {
+    await hybridRepository.updateDocument('bankAccounts', id, data);
+  },
+
+  async delete(id: string) {
+    await hybridRepository.deleteDocument('bankAccounts', id);
+  },
+};
+
 // Export all services
 export const dataService = {
   transactions: transactionService,
@@ -164,4 +189,5 @@ export const dataService = {
   goals: goalService,
   quotations: quotationService,
   billReminders: billReminderService,
+  bankAccounts: bankAccountService,
 };

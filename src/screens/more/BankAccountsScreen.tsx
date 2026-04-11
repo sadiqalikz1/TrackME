@@ -16,6 +16,7 @@ import { Card, Modal, Button, Input, EmptyState } from '@/components/ui';
 import { BankAccount, BankType } from '@/types';
 import { CURRENCIES } from '@/utils/constants';
 import { formatCurrency, parseCurrencyInput, isValidAmount } from '@/utils/formatters';
+import { bankAccountService } from '@/services/dataService';
 
 const BANK_TYPES: { type: BankType; label: string; icon: string; color: string }[] = [
   { type: 'bank', label: 'Bank', icon: 'business', color: '#3b82f6' },
@@ -54,10 +55,11 @@ const BankAccountsScreen: React.FC = () => {
   const loadAccounts = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with actual data service call
-      setAccounts([]);
+      const data = await bankAccountService.getAll();
+      setAccounts(data || []);
     } catch (error) {
       showError('Failed to load accounts');
+      console.error('Load accounts error:', error);
     } finally {
       setLoading(false);
     }
@@ -89,8 +91,7 @@ const BankAccountsScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      const accountData: BankAccount = {
-        id: editingAccount?.id || Date.now().toString(),
+      const accountData: Omit<BankAccount, 'id'> = {
         uid: user!.uid,
         name: nameStr,
         type,
@@ -103,17 +104,19 @@ const BankAccountsScreen: React.FC = () => {
       };
 
       if (editingAccount) {
-        setAccounts(accounts.map(a => a.id === editingAccount.id ? accountData : a));
+        await bankAccountService.update(editingAccount.id, accountData);
         showSuccess('Account updated');
       } else {
-        setAccounts([...accounts, accountData]);
+        await bankAccountService.create(accountData);
         showSuccess('Account created');
       }
 
       setModalVisible(false);
       resetForm();
+      loadAccounts(); // Reload after save
     } catch (error) {
       showError('Failed to save account');
+      console.error('Save account error:', error);
     } finally {
       setSaving(false);
     }
@@ -127,10 +130,13 @@ const BankAccountsScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           try {
+            await bankAccountService.delete(account.id);
             setAccounts(accounts.filter(a => a.id !== account.id));
             showSuccess('Account deleted');
+            loadAccounts(); // Reload after delete
           } catch (error) {
             showError('Failed to delete account');
+            console.error('Delete account error:', error);
           }
         },
       },

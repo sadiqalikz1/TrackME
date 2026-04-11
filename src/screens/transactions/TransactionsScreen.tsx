@@ -16,7 +16,7 @@ import { Card, Input, Modal, Button, CategoryGrid, EmptyState, DateTimePicker, B
 import { TransactionItem } from '@/components/common';
 import { Transaction, TransactionCategory, TransactionType, BankAccount, BankType } from '@/types';
 import { useData, useDataMutations } from '@/hooks';
-import { transactionService } from '@/services/dataService';
+import { transactionService, bankAccountService } from '@/services/dataService';
 import { COLLECTIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/utils/constants';
 import { formatDate, parseCurrencyInput, isValidAmount } from '@/utils/formatters';
 
@@ -73,6 +73,19 @@ const TransactionsScreen: React.FC = () => {
     }
   }, [route.params]);
 
+  // Load bank accounts on mount
+  useEffect(() => {
+    const loadBankAccounts = async () => {
+      try {
+        const accounts = await bankAccountService.getAll();
+        setBankAccounts(accounts || []);
+      } catch (error) {
+        console.error('Failed to load bank accounts:', error);
+      }
+    };
+    loadBankAccounts();
+  }, []);
+
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
     return transactions.filter((t: Transaction) => {
@@ -116,8 +129,7 @@ const TransactionsScreen: React.FC = () => {
     setTransactionDate(transaction.date);
     setTransactionTime(transaction.time || '12:00');
     setPaymentMode((transaction.bankAccount as PaymentMode) || 'cash');
-    // TODO: Load accountId from transaction when saving to DB
-    setSelectedAccountId(undefined);
+    setSelectedAccountId(transaction.bankAccountId);
     setModalVisible(true);
   };
 
@@ -131,7 +143,7 @@ const TransactionsScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      const transactionData = {
+      const transactionData: any = {
         uid: user!.uid,
         amount: parsedAmount,
         type: transactionType,
@@ -142,6 +154,11 @@ const TransactionsScreen: React.FC = () => {
         bankAccount: paymentMode,
         isRecurring: false,
       };
+
+      // Add bankAccountId if selected
+      if (selectedAccountId) {
+        transactionData.bankAccountId = selectedAccountId;
+      }
 
       if (editingTransaction) {
         await transactionService.update(editingTransaction.id, transactionData);
@@ -156,6 +173,7 @@ const TransactionsScreen: React.FC = () => {
       setModalVisible(false);
     } catch (error) {
       showError('Failed to save transaction');
+      console.error('Save transaction error:', error);
     } finally {
       setSaving(false);
     }

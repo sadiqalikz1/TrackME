@@ -56,6 +56,7 @@ export interface Transaction {
   time: string; // HH:mm format
   isRecurring: boolean;
   recurringId?: string;
+  bankAccountId?: string;
   bankAccount?: string;
   workId?: string; // Reference to Work if from profit transfer
   createdAt: Date;

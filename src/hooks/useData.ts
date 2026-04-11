@@ -75,6 +75,7 @@ function getServiceForCollection(collection: CollectionName): any {
     work: dataService.work,
     quotations: dataService.quotations,
     billReminders: dataService.billReminders,
+    bankAccounts: dataService.bankAccounts,
     users: dataService.transactions, // Fallback (users rarely fetched this way)
   };
 

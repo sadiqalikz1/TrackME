@@ -31,6 +31,7 @@ export const COLLECTIONS = [
   'work',
   'quotations',
   'billReminders',
+  'bankAccounts',
 ] as const;
 
 export type CollectionName = typeof COLLECTIONS[number];
