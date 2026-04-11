@@ -307,6 +307,7 @@ export type RootStackParamList = {
   Work: undefined;
   WorkDetail: { workId: string };
   WorkDetailsPage: { workId: string };
+  WorkDashboardCustomization: undefined;
   MoreMenu: undefined;
   BankAccounts: undefined;
   Budgets: undefined;
@@ -344,6 +345,31 @@ export interface DashboardCard {
 export interface DashboardConfig {
   version: number;
   cards: DashboardCard[];
+  lastUpdated: number;
+}
+
+// Work Dashboard Types
+export type WorkDashboardCardId = 
+  | 'overview'
+  | 'financialSummary'
+  | 'timeTracking'
+  | 'balanceDue'
+  | 'categoryBreakdown'
+  | 'performanceMetrics'
+  | 'topPerformers'
+  | 'recentActivity';
+
+export interface WorkDashboardCard {
+  id: WorkDashboardCardId;
+  name: string;
+  enabled: boolean;
+  position: number;
+  customColor?: string;
+}
+
+export interface WorkDashboardConfig {
+  version: number;
+  cards: WorkDashboardCard[];
   lastUpdated: number;
 }
 

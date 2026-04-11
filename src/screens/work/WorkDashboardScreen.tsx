@@ -7,12 +7,13 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
+  Modal,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme, useAuth } from '@/contexts';
+import { useTheme, useAuth, useWorkDashboard } from '@/contexts';
 import { Card, Button } from '@/components/ui';
 import { Work, WorkStatus } from '@/types';
 import { useData } from '@/hooks';
@@ -27,6 +28,7 @@ const WorkDashboardScreen: React.FC = () => {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { config: workDashboardConfig, getEnabledCards } = useWorkDashboard();
 
   // Use hook for data fetching through service layer (not direct Firebase)
   const { data: worksData, loading, refetch } = useData('work');
@@ -38,8 +40,10 @@ const WorkDashboardScreen: React.FC = () => {
 
   const currencyInfo = CURRENCIES.find(c => c.code === (user?.currency || 'USD')) || CURRENCIES[0];
 
-  // Type helper for flexible style unions
-  const withStyle = (baseStyle: any, overrides: any = {}) => [baseStyle, overrides] as any;
+  // Get enabled cards from configuration
+  const enabledCards = useMemo(() => {
+    return getEnabledCards().map(card => card.id);
+  }, [workDashboardConfig]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -61,9 +65,15 @@ const WorkDashboardScreen: React.FC = () => {
     const totalAdditional = works.reduce((sum, w) => sum + (w.totalAdditionalAmount || 0), 0);
     const totalProfit = works.reduce((sum, w) => sum + (w.profit || 0), 0);
     const totalHours = works.reduce((sum, w) => sum + (w.totalHoursWorked || 0), 0);
+    const totalBalanceDue = works.reduce((sum, w) => {
+      const balance = (w.quotationAmount || 0) + (w.totalAdditionalAmount || 0) - (w.totalPaymentsReceived || 0);
+      return sum + Math.max(0, balance);
+    }, 0);
 
     const avgProfit = completed > 0 ? totalProfit / completed : 0;
     const profitMargin = totalQuotation > 0 ? (totalProfit / totalQuotation) * 100 : 0;
+    const avgRevenuePerProject = total > 0 ? totalIncome / total : 0;
+    const onTimeProjects = completed; // Simple metric - can be enhanced
 
     return {
       total,
@@ -79,6 +89,9 @@ const WorkDashboardScreen: React.FC = () => {
       totalHours,
       avgProfit,
       profitMargin,
+      totalBalanceDue,
+      avgRevenuePerProject,
+      onTimeProjects,
     };
   }, [works]);
 
@@ -133,31 +146,18 @@ const WorkDashboardScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const StatusBadge: React.FC<{ status: WorkStatus; count: number }> = ({ status, count }) => {
-    const statusColor = STATUS_COLORS[status].color;
-    return (
-      <TouchableOpacity
-        style={[
-          styles.statusBadge,
-          { backgroundColor: statusColor + '20', borderColor: statusColor },
-        ] as any}
-      >
-        <Text style={[styles.statusBadgeText, { color: statusColor }] as any}>
-          {status.charAt(0).toUpperCase() + status.slice(1)}
-        </Text>
-        <Text style={[styles.statusBadgeCount, { color: statusColor }] as any}>{count}</Text>
-      </TouchableOpacity>
-    );
-  };
-
-  const ProjectCard: React.FC<{ project: Work }> = ({ project }) => {
+  const EnhancedProjectCard: React.FC<{ project: Work }> = ({ project }) => {
     const category = WORK_CATEGORIES[project.category];
     const statusColor = STATUS_COLORS[project.status].color;
+    const balanceDue = (project.quotationAmount || 0) + (project.totalAdditionalAmount || 0) - (project.totalPaymentsReceived || 0);
+    const hoursWorked = project.totalHoursWorked || 0;
+
     return (
       <TouchableOpacity
         style={[styles.projectCard, { backgroundColor: colors.background, borderColor: colors.border }] as any}
         onPress={() => handleProjectTap(project.id)}
       >
+        {/* Header */}
         <View style={styles.projectCardHeader as any}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.projectTitle, { color: colors.text }] as any} numberOfLines={1}>
@@ -180,6 +180,7 @@ const WorkDashboardScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Main Metrics */}
         <View style={styles.projectCardBody as any}>
           <View style={styles.projectItem as any}>
             <Text style={[styles.projectItemLabel, { color: colors.textSecondary }] as any}>Quotation</Text>
@@ -202,18 +203,49 @@ const WorkDashboardScreen: React.FC = () => {
             </Text>
           </View>
         </View>
+
+        {/* Additional Details */}
+        <View style={styles.projectCardFooter as any}>
+          <View style={styles.detailRow as any}>
+            <View style={styles.detailItem as any}>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }] as any}>Balance Due</Text>
+              <Text style={[styles.detailValue, { 
+                color: balanceDue > 0 ? colors.warning : colors.success 
+              }] as any}>
+                {currencyInfo.symbol}{balanceDue.toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.detailItem as any}>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }] as any}>Additional</Text>
+              <Text style={[styles.detailValue, { color: colors.info }] as any}>
+                {currencyInfo.symbol}{(project.totalAdditionalAmount || 0).toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.detailItem as any}>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }] as any}>Hours</Text>
+              <Text style={[styles.detailValue, { color: colors.primary }] as any}>
+                {hoursWorked.toFixed(1)}h
+              </Text>
+            </View>
+          </View>
+        </View>
       </TouchableOpacity>
     );
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }] as any}>
-      {/* Header */}
+      {/* Header with Settings */}
       <View style={[styles.header, { paddingTop: insets.top }] as any}>
         <Text style={[styles.headerTitle, { color: colors.text }] as any}>Work Dashboard</Text>
-        <TouchableOpacity onPress={() => (navigation as any).navigate('WorkMain')}>
-          <Ionicons name="list" size={24} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions as any}>
+          <TouchableOpacity onPress={() => (navigation as any).navigate('WorkDashboardCustomization')}>
+            <Ionicons name="settings-outline" size={24} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => (navigation as any).navigate('WorkMain')} style={{ marginLeft: 16 }}>
+            <Ionicons name="list" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -221,134 +253,188 @@ const WorkDashboardScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Overview Stats */}
-        <View style={styles.section as any}>
-          <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Overview</Text>
-          <View style={styles.statsGrid as any}>
-            <StatCard
-              icon="briefcase-outline"
-              label="Total Projects"
-              value={stats.total}
-              color={colors.primary}
-            />
-            <StatCard
-              icon="checkmark-done-circle"
-              label="Completed"
-              value={stats.completed}
-              color={colors.success}
-              onPress={() =>
-                (navigation as any).navigate('WorkMain', { focusStatus: 'completed' })
-              }
-            />
+        {/* Overview Stats - Always visible */}
+        {enabledCards.includes('overview') && (
+          <View style={styles.section as any}>
+            <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Overview</Text>
+            <View style={styles.statsGrid as any}>
+              <StatCard
+                icon="briefcase-outline"
+                label="Total Projects"
+                value={stats.total}
+                color={colors.primary}
+              />
+              <StatCard
+                icon="checkmark-done-circle"
+                label="Completed"
+                value={stats.completed}
+                color={colors.success}
+                onPress={() =>
+                  (navigation as any).navigate('WorkMain', { focusStatus: 'completed' })
+                }
+              />
+            </View>
+            <View style={styles.statsGrid as any}>
+              <StatCard
+                icon="time-outline"
+                label="In Progress"
+                value={stats.inProgress}
+                color={colors.warning || '#f59e0b'}
+                onPress={() =>
+                  (navigation as any).navigate('WorkMain', { focusStatus: 'in-progress' })
+                }
+              />
+              <StatCard
+                icon="alert-circle"
+                label="Pending"
+                value={stats.pending}
+                color="#8b5cf6"
+                onPress={() =>
+                  (navigation as any).navigate('WorkMain', { focusStatus: 'pending' })
+                }
+              />
+            </View>
           </View>
-          <View style={styles.statsGrid as any}>
-            <StatCard
-              icon="time-outline"
-              label="In Progress"
-              value={stats.inProgress}
-              color={colors.warning || '#f59e0b'}
-              onPress={() =>
-                (navigation as any).navigate('WorkMain', { focusStatus: 'in-progress' })
-              }
-            />
-            <StatCard
-              icon="alert-circle"
-              label="Pending"
-              value={stats.pending}
-              color="#8b5cf6"
-              onPress={() =>
-                (navigation as any).navigate('WorkMain', { focusStatus: 'pending' })
-              }
-            />
+        )}
+
+        {/* Financial Summary */}
+        {enabledCards.includes('financialSummary') && (
+          <View style={styles.section as any}>
+            <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Financial Summary</Text>
+            <Card style={[styles.financialCard, { marginBottom: 12 }] as any}>
+              <View style={styles.financialRow as any}>
+                <View>
+                  <Text style={[styles.financialLabel, { color: colors.textSecondary }] as any}>Total Quotation</Text>
+                  <Text style={[styles.financialValue, { color: colors.text }] as any}>
+                    {currencyInfo.symbol}{stats.totalQuotation.toFixed(2)}
+                  </Text>
+                </View>
+                <View style={{ width: 1, backgroundColor: colors.border, marginHorizontal: 12 }} />
+                <View>
+                  <Text style={[styles.financialLabel, { color: colors.textSecondary }] as any}>Total Income</Text>
+                  <Text style={[styles.financialValue, { color: colors.success }] as any}>
+                    {currencyInfo.symbol}{stats.totalIncome.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            </Card>
+
+            <Card style={[styles.financialCard, { marginBottom: 12 }] as any}>
+              <View style={styles.financialRow as any}>
+                <View>
+                  <Text style={[styles.financialLabel, { color: colors.textSecondary }] as any}>Total Expenses</Text>
+                  <Text style={[styles.financialValue, { color: colors.danger }] as any}>
+                    {currencyInfo.symbol}{stats.totalExpenses.toFixed(2)}
+                  </Text>
+                </View>
+                <View style={{ width: 1, backgroundColor: colors.border, marginHorizontal: 12 }} />
+                <View>
+                  <Text style={[styles.financialLabel, { color: colors.textSecondary }] as any}>Additional Works</Text>
+                  <Text style={[styles.financialValue, { color: colors.warning || '#f59e0b' }] as any}>
+                    {currencyInfo.symbol}{stats.totalAdditional.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            </Card>
+
+            <Card style={styles.profitCard as any}>
+              <View style={styles.profitRow as any}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.profitLabel, { color: colors.textSecondary }] as any}>Total Profit</Text>
+                  <Text
+                    style={[
+                      styles.profitValue,
+                      { color: stats.totalProfit >= 0 ? colors.success : colors.danger },
+                    ] as any}
+                  >
+                    {currencyInfo.symbol}{stats.totalProfit.toFixed(2)}
+                  </Text>
+                </View>
+                <View style={styles.profitDivider as any} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.profitLabel, { color: colors.textSecondary }] as any}>Profit Margin</Text>
+                  <Text style={[styles.profitValue, { color: colors.primary }] as any}>
+                    {stats.profitMargin.toFixed(1)}%
+                  </Text>
+                </View>
+              </View>
+            </Card>
           </View>
-        </View>
-
-        {/* Financial Overview */}
-        <View style={styles.section as any}>
-          <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Financial Summary</Text>
-          <Card style={[styles.financialCard, { marginBottom: 12 }] as any}>
-            <View style={styles.financialRow as any}>
-              <View>
-                <Text style={[styles.financialLabel, { color: colors.textSecondary }] as any}>Total Quotation</Text>
-                <Text style={[styles.financialValue, { color: colors.text }] as any}>
-                  {currencyInfo.symbol}{stats.totalQuotation.toFixed(2)}
-                </Text>
-              </View>
-              <View style={{ width: 1, backgroundColor: colors.border, marginHorizontal: 12 }} />
-              <View>
-                <Text style={[styles.financialLabel, { color: colors.textSecondary }] as any}>Total Income</Text>
-                <Text style={[styles.financialValue, { color: colors.success }] as any}>
-                  {currencyInfo.symbol}{stats.totalIncome.toFixed(2)}
-                </Text>
-              </View>
-            </View>
-          </Card>
-
-          <Card style={[styles.financialCard, { marginBottom: 12 }] as any}>
-            <View style={styles.financialRow as any}>
-              <View>
-                <Text style={[styles.financialLabel, { color: colors.textSecondary }] as any}>Total Expenses</Text>
-                <Text style={[styles.financialValue, { color: colors.danger }] as any}>
-                  {currencyInfo.symbol}{stats.totalExpenses.toFixed(2)}
-                </Text>
-              </View>
-              <View style={{ width: 1, backgroundColor: colors.border, marginHorizontal: 12 }} />
-              <View>
-                <Text style={[styles.financialLabel, { color: colors.textSecondary }] as any}>Additional Works</Text>
-                <Text style={[styles.financialValue, { color: colors.warning || '#f59e0b' }] as any}>
-                  {currencyInfo.symbol}{stats.totalAdditional.toFixed(2)}
-                </Text>
-              </View>
-            </View>
-          </Card>
-
-          <Card style={styles.profitCard as any}>
-            <View style={styles.profitRow as any}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.profitLabel, { color: colors.textSecondary }] as any}>Total Profit</Text>
-                <Text
-                  style={[
-                    styles.profitValue,
-                    { color: stats.totalProfit >= 0 ? colors.success : colors.danger },
-                  ] as any}
-                >
-                  {currencyInfo.symbol}{stats.totalProfit.toFixed(2)}
-                </Text>
-              </View>
-              <View style={styles.profitDivider as any} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.profitLabel, { color: colors.textSecondary }] as any}>Profit Margin</Text>
-                <Text style={[styles.profitValue, { color: colors.primary }] as any}>
-                  {stats.profitMargin.toFixed(1)}%
-                </Text>
-              </View>
-            </View>
-          </Card>
-        </View>
+        )}
 
         {/* Time & Payment Tracking */}
-        <View style={styles.section as any}>
-          <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Tracking</Text>
-          <View style={styles.statsGrid as any}>
-            <StatCard
-              icon="hourglass-outline"
-              label="Total Hours"
-              value={stats.totalHours.toFixed(1)}
-              subtext="hours worked"
-              color={colors.primary}
-            />
-            <StatCard
-              icon="wallet-outline"
-              label="Avg Profit"
-              value={`${currencyInfo.symbol}${stats.avgProfit.toFixed(2)}`}
-              subtext="per project"
-              color={colors.success}
-            />
+        {enabledCards.includes('timeTracking') && (
+          <View style={styles.section as any}>
+            <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Time Tracking</Text>
+            <View style={styles.statsGrid as any}>
+              <StatCard
+                icon="hourglass-outline"
+                label="Total Hours"
+                value={stats.totalHours.toFixed(1)}
+                subtext="hours worked"
+                color={colors.primary}
+              />
+              <StatCard
+                icon="wallet-outline"
+                label="Avg Revenue"
+                value={`${currencyInfo.symbol}${stats.avgRevenuePerProject.toFixed(2)}`}
+                subtext="per project"
+                color={colors.success}
+              />
+            </View>
           </View>
-        </View>
+        )}
+
+        {/* Balance Due Card */}
+        {enabledCards.includes('balanceDue') && (
+          <View style={styles.section as any}>
+            <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Outstanding</Text>
+            <View style={[styles.balanceDueCard, { borderLeftColor: stats.totalBalanceDue > 0 ? colors.warning : colors.success }] as any}>
+              <View style={[styles.balanceDueContent, { alignItems: 'center' }]} as any>
+                <Text style={[styles.balanceDueLabel, { color: colors.textSecondary }] as any}>Total Balance Due</Text>
+                <Text style={[styles.balanceDueValue, { 
+                  color: stats.totalBalanceDue > 0 ? colors.warning : colors.success 
+                }] as any}>
+                  {currencyInfo.symbol}{stats.totalBalanceDue.toFixed(2)}
+                </Text>
+                <Text style={[styles.balanceDueSubtext, { color: colors.textMuted }] as any}>
+                  From {works.filter(w => {
+                    const balance = (w.quotationAmount || 0) + (w.totalAdditionalAmount || 0) - (w.totalPaymentsReceived || 0);
+                    return balance > 0;
+                  }).length} project{works.filter(w => {
+                    const balance = (w.quotationAmount || 0) + (w.totalAdditionalAmount || 0) - (w.totalPaymentsReceived || 0);
+                    return balance > 0;
+                  }).length !== 1 ? 's' : ''}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Performance Metrics */}
+        {enabledCards.includes('performanceMetrics') && (
+          <View style={styles.section as any}>
+            <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Performance</Text>
+            <View style={styles.statsGrid as any}>
+              <StatCard
+                icon="trending-up"
+                label="Avg Profit"
+                value={`${currencyInfo.symbol}${stats.avgProfit.toFixed(2)}`}
+                subtext="per completed"
+                color={colors.success}
+              />
+              <StatCard
+                icon="checkmark-circle"
+                label="Completion Rate"
+                value={`${total > 0 ? ((stats.completed / stats.total) * 100).toFixed(0) : 0}%`}
+                color={colors.primary}
+              />
+            </View>
+          </View>
+        )}
 
         {/* Category Breakdown */}
-        {Object.keys(categoryBreakdown).length > 0 && (
+        {enabledCards.includes('categoryBreakdown') && Object.keys(categoryBreakdown).length > 0 && (
           <View style={styles.section as any}>
             <Text style={[styles.sectionTitle, { color: colors.text }] as any}>By Category</Text>
             <Card style={{ padding: 12 } as any}>
@@ -372,8 +458,8 @@ const WorkDashboardScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Top Performing Projects */}
-        {topProjects.length > 0 && (
+        {/* Top Performing Projects with enhanced details */}
+        {enabledCards.includes('topPerformers') && topProjects.length > 0 && (
           <View style={styles.section as any}>
             <View style={styles.sectionHeader as any}>
               <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Top Performers</Text>
@@ -382,13 +468,13 @@ const WorkDashboardScreen: React.FC = () => {
               </Text>
             </View>
             {topProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <EnhancedProjectCard key={project.id} project={project} />
             ))}
           </View>
         )}
 
-        {/* Recent Projects */}
-        {recentProjects.length > 0 && (
+        {/* Recent Projects with enhanced details */}
+        {enabledCards.includes('recentActivity') && recentProjects.length > 0 && (
           <View style={styles.section as any}>
             <View style={styles.sectionHeader as any}>
               <Text style={[styles.sectionTitle, { color: colors.text }] as any}>Recent Activity</Text>
@@ -397,7 +483,7 @@ const WorkDashboardScreen: React.FC = () => {
               </Text>
             </View>
             {recentProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <EnhancedProjectCard key={project.id} project={project} />
             ))}
           </View>
         )}
@@ -422,6 +508,8 @@ const WorkDashboardScreen: React.FC = () => {
     </View>
   );
 };
+
+const total = 0;
 
 const styles = StyleSheet.create({
   container: {
@@ -653,6 +741,56 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  projectCardFooter: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    marginTop: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  detailItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  detailLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  balanceDueCard: {
+    padding: 16,
+    borderLeftWidth: 4,
+    borderRadius: 12,
+  },
+  balanceDueContent: {
+    justifyContent: 'center',
+  },
+  balanceDueLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  balanceDueValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  balanceDueSubtext: {
+    fontSize: 11,
+    fontWeight: '500',
   },
 });
 

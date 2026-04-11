@@ -133,6 +133,21 @@ export const DASHBOARD_DEFAULT_CONFIG = {
   lastUpdated: Date.now(),
 };
 
+export const WORK_DASHBOARD_DEFAULT_CONFIG = {
+  version: 1,
+  cards: [
+    { id: 'overview' as const, name: 'Project Overview', enabled: true, position: 0 },
+    { id: 'financialSummary' as const, name: 'Financial Summary', enabled: true, position: 1 },
+    { id: 'timeTracking' as const, name: 'Time Tracking', enabled: true, position: 2 },
+    { id: 'balanceDue' as const, name: 'Balance Due', enabled: true, position: 3 },
+    { id: 'categoryBreakdown' as const, name: 'Category Breakdown', enabled: true, position: 4 },
+    { id: 'performanceMetrics' as const, name: 'Performance Metrics', enabled: true, position: 5 },
+    { id: 'topPerformers' as const, name: 'Top Performers', enabled: true, position: 6 },
+    { id: 'recentActivity' as const, name: 'Recent Activity', enabled: true, position: 7 },
+  ],
+  lastUpdated: Date.now(),
+};
+
 // Firestore Collections
 export const COLLECTIONS = {
   USERS: 'users',

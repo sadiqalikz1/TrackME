@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
-import { AuthProvider, ThemeProvider, NotificationProvider, DashboardProvider, useTheme, useAuth } from '@/contexts';
+import { AuthProvider, ThemeProvider, NotificationProvider, DashboardProvider, WorkDashboardProvider, useTheme, useAuth } from '@/contexts';
 import { NotificationToast } from '@/components';
 import { DataSyncStrategyModal } from '@/components/ui';
 import RootNavigator from '@/navigation/RootNavigator';
@@ -36,9 +36,11 @@ const App: React.FC = () => {
         <ThemeProvider>
           <AuthProvider>
             <DashboardProvider>
-              <NotificationProvider>
-                <AppContent />
-              </NotificationProvider>
+              <WorkDashboardProvider>
+                <NotificationProvider>
+                  <AppContent />
+                </NotificationProvider>
+              </WorkDashboardProvider>
             </DashboardProvider>
           </AuthProvider>
         </ThemeProvider>
