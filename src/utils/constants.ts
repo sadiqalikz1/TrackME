@@ -40,6 +40,37 @@ export const DEFAULT_BANKS = [
   { id: '4', name: 'Cash', type: 'cash' as const },
 ];
 
+// Account Display Configuration
+export const ACCOUNT_DISPLAY_CONFIG = {
+  bankAccounts: {
+    title: 'Bank Accounts',
+    description: 'View all bank accounts with current balance',
+    icon: 'bank',
+    displayFormat: 'detailedList', // 'detailedList', 'summary', 'card'
+    showAmount: true,
+    showTransactionCount: true,
+    showLastTransaction: true,
+    sortBy: 'amount', // 'name', 'amount', 'lastUpdated'
+  },
+  cashInHand: {
+    title: 'Cash In Hand',
+    description: 'Physical cash available',
+    icon: 'wallet',
+    displayFormat: 'summary', // 'summary', 'detailed'
+    showAmount: true,
+    showCurrencySwitch: true,
+    warningThreshold: 1000, // Show warning if below this
+  },
+  allAccounts: {
+    title: 'All Accounts Summary',
+    description: 'Total balance across all accounts',
+    icon: 'pie-chart',
+    displayTypes: ['bank', 'wallet', 'investment', 'cash'],
+    showBreakdown: true,
+    chartType: 'pie', // 'pie', 'bar', 'list'
+  },
+};
+
 // Work Categories
 export const WORK_CATEGORIES: Record<WorkCategory, { icon: string; color: string; label: string }> = {
   cctv: { icon: 'videocam', color: '#3b82f6', label: 'CCTV' },
@@ -94,6 +125,28 @@ export const FREQUENCY_OPTIONS: { value: RecurringFrequency; label: string }[] =
   { value: 'yearly', label: 'Yearly' },
 ];
 
+// Amount Display Options
+export const AMOUNT_DISPLAY_OPTIONS = {
+  compact: { label: 'Compact', format: 'abbreviated', example: '25.5K' },
+  detailed: { label: 'Detailed', format: 'full', example: '25,500.00' },
+  scientific: { label: 'Scientific', format: 'scientific', example: '2.55e+4' },
+};
+
+export const ACCOUNT_VIEW_OPTIONS = {
+  list: { label: 'List View', icon: 'list', value: 'list' },
+  card: { label: 'Card View', icon: 'grid', value: 'card' },
+  detailed: { label: 'Detailed View', icon: 'document', value: 'detailed' },
+};
+
+// Dashboard Amount Display Settings
+export const DASHBOARD_AMOUNT_SETTINGS = {
+  default: 'detailed' as const,
+  currency: 'show', // 'show', 'hide', 'symbol_only'
+  decimalPlaces: 2,
+  thousandsSeparator: true,
+  hideOnLockScreen: false,
+};
+
 // Date Formats
 export const DATE_FORMATS = {
   display: 'MMM d, yyyy',
@@ -120,15 +173,17 @@ export const DASHBOARD_DEFAULT_CONFIG = {
   version: 1,
   cards: [
     { id: 'balance' as const, name: 'Balance', enabled: true, position: 0 },
-    { id: 'incomeExpense' as const, name: 'Income & Expense', enabled: true, position: 1 },
-    { id: 'budgetStatus' as const, name: 'Budget Status', enabled: true, position: 2 },
-    { id: 'workOverview' as const, name: 'Work Overview', enabled: true, position: 3 },
-    { id: 'netWorth' as const, name: 'Net Worth', enabled: true, position: 4 },
-    { id: 'spendingTrends' as const, name: 'Spending Trends', enabled: true, position: 5 },
-    { id: 'topCategories' as const, name: 'Top Categories', enabled: true, position: 6 },
-    { id: 'upcomingBills' as const, name: 'Upcoming Bills', enabled: true, position: 7 },
-    { id: 'goals' as const, name: 'Goals Progress', enabled: true, position: 8 },
-    { id: 'recentTransactions' as const, name: 'Recent Transactions', enabled: true, position: 9 },
+    { id: 'bankAccounts' as const, name: 'Bank Accounts', enabled: true, position: 1 },
+    { id: 'cashInHand' as const, name: 'Cash In Hand', enabled: true, position: 2 },
+    { id: 'incomeExpense' as const, name: 'Income & Expense', enabled: true, position: 3 },
+    { id: 'budgetStatus' as const, name: 'Budget Status', enabled: true, position: 4 },
+    { id: 'workOverview' as const, name: 'Work Overview', enabled: true, position: 5 },
+    { id: 'netWorth' as const, name: 'Net Worth', enabled: true, position: 6 },
+    { id: 'spendingTrends' as const, name: 'Spending Trends', enabled: true, position: 7 },
+    { id: 'topCategories' as const, name: 'Top Categories', enabled: true, position: 8 },
+    { id: 'upcomingBills' as const, name: 'Upcoming Bills', enabled: true, position: 9 },
+    { id: 'goals' as const, name: 'Goals Progress', enabled: true, position: 10 },
+    { id: 'recentTransactions' as const, name: 'Recent Transactions', enabled: true, position: 11 },
   ],
   lastUpdated: Date.now(),
 };
@@ -164,7 +219,7 @@ export const COLLECTIONS = {
 // App Configuration
 export const APP_CONFIG = {
   APP_NAME: 'TrackME',
-  VERSION: '1.0.0',
+  VERSION: '1.0.1',
   MAX_BUDGET_CATEGORIES: 10,
   MAX_GOALS: 20,
   DEFAULT_BUDGET_ALERT: 80, // percentage
