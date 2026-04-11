@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
-import { Card, Input, Modal, Button, CategoryGrid, EmptyState, DateTimePicker, BankAccountSelector } from '@/components/ui';
+import { Card, Input, Modal, Button, CategoryGrid, EmptyState, DateTimePicker, BankAccountSelector, FilterCard, Pagination, type FilterConfig } from '@/components/ui';
 import { TransactionItem } from '@/components/common';
 import { Transaction, TransactionCategory, TransactionType, BankAccount, BankType } from '@/types';
 import { useData, useDataMutations } from '@/hooks';
@@ -42,8 +42,19 @@ const TransactionsScreen: React.FC = () => {
   const { data: transactions, loading, refetch } = useData('transactions');
 
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  // Initialize filter config with default 30-day range
+  const getDefaultFilterConfig = (): FilterConfig => ({
+    searchQuery: '',
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    filterType: 'all',
+  });
+
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>(getDefaultFilterConfig());
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -91,12 +102,30 @@ const TransactionsScreen: React.FC = () => {
     return transactions.filter((t: Transaction) => {
       const matchesType = filterType === 'all' || t.type === filterType;
       const matchesSearch =
-        searchQuery === '' ||
-        t.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.category.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesType && matchesSearch;
+        filterConfig.searchQuery === '' ||
+        t.note?.toLowerCase().includes(filterConfig.searchQuery.toLowerCase()) ||
+        t.category.toLowerCase().includes(filterConfig.searchQuery.toLowerCase());
+      
+      // Date range filtering
+      const transactionDate = t.date;
+      const matchesDateRange = transactionDate >= filterConfig.startDate && transactionDate <= filterConfig.endDate;
+      
+      return matchesType && matchesSearch && matchesDateRange;
     });
-  }, [transactions, filterType, searchQuery]);
+  }, [transactions, filterType, filterConfig]);
+
+  // Pagination logic
+  const paginatedTransactions = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredTransactions.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredTransactions, currentPage]);
+
+  const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterConfig, filterType]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -240,25 +269,26 @@ const TransactionsScreen: React.FC = () => {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Search & Filter */}
+      {/* Search & Filter with FilterCard */}
       <View style={styles.searchContainer}>
-        <Input
-          placeholder="Search transactions..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          leftIcon={<Ionicons name="search" size={20} color={colors.textMuted} />}
-          containerStyle={styles.searchInput}
+        <FilterCard
+          config={filterConfig}
+          onConfigChange={setFilterConfig}
+          showFilterType={true}
+          filterTypeOptions={[
+            { value: 'all', label: 'All' },
+            { value: 'income', label: 'Income' },
+            { value: 'expense', label: 'Expense' },
+          ]}
+          selectedFilterType={filterType}
+          onFilterTypeChange={setFilterType}
+          resultCount={filteredTransactions.length}
         />
-        <View style={styles.filterRow}>
-          {renderFilterButton('all', 'All')}
-          {renderFilterButton('income', 'Income')}
-          {renderFilterButton('expense', 'Expense')}
-        </View>
       </View>
 
       {/* Transaction List */}
       <FlatList
-        data={filteredTransactions}
+        data={paginatedTransactions}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TransactionItem
@@ -280,6 +310,17 @@ const TransactionsScreen: React.FC = () => {
             actionLabel="Add Transaction"
             onAction={openAddModal}
           />
+        }
+        ListFooterComponent={
+          filteredTransactions.length > 0 ? (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              itemsPerPage={ITEMS_PER_PAGE}
+              totalItems={filteredTransactions.length}
+              onPageChange={setCurrentPage}
+            />
+          ) : null
         }
       />
 

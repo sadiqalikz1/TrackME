@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme, useAuth, useNotification } from '@/contexts';
-import { Card, Input, Modal, Button, EmptyState } from '@/components/ui';
+import { Card, Input, Modal, Button, EmptyState, FilterCard, Pagination, type FilterConfig } from '@/components/ui';
 import { WorkCard } from '@/components/common';
 import { Work, WorkCategory, WorkStatus } from '@/types';
 import { workService } from '@/services/dataService';
@@ -33,6 +33,17 @@ const WorkScreen: React.FC = () => {
 
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<WorkStatus | 'all'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 8;
+
+  // Initialize filter config with default 30-day range
+  const getDefaultFilterConfig = (): FilterConfig => ({
+    searchQuery: '',
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+  });
+
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>(getDefaultFilterConfig());
 
   // Ensure works is an array
   const works = Array.isArray(worksData) ? worksData : [];
@@ -52,9 +63,46 @@ const WorkScreen: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   const filteredWorks = useMemo(() => {
-    if (statusFilter === 'all') return works;
-    return works.filter((w) => w.status === statusFilter);
-  }, [works, statusFilter]);
+    let filtered = works;
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((w) => w.status === statusFilter);
+    }
+    
+    // Apply search filter
+    if (filterConfig.searchQuery) {
+      const query = filterConfig.searchQuery.toLowerCase();
+      filtered = filtered.filter((w) =>
+        w.title.toLowerCase().includes(query) ||
+        w.category.toLowerCase().includes(query) ||
+        (w.description && w.description.toLowerCase().includes(query))
+      );
+    }
+    
+    // Apply date range filter
+    const startDate = new Date(filterConfig.startDate).getTime();
+    const endDate = new Date(filterConfig.endDate).getTime();
+    filtered = filtered.filter((w) => {
+      const workDate = new Date(w.startDate).getTime();
+      return workDate >= startDate && workDate <= endDate;
+    });
+    
+    return filtered;
+  }, [works, statusFilter, filterConfig]);
+
+  // Pagination logic
+  const paginatedWorks = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredWorks.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredWorks, currentPage]);
+
+  const totalPages = Math.ceil(filteredWorks.length / ITEMS_PER_PAGE);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterConfig, statusFilter]);
 
   const stats = useMemo(() => {
     const activeCount = works.filter((w) => w.status !== 'completed' && w.status !== 'cancelled').length;
@@ -227,7 +275,17 @@ const WorkScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Status Filter */}
+      {/* Filter Card and Status Chips */}
+      <View style={styles.filterCardContainer}>
+        <FilterCard
+          config={filterConfig}
+          onConfigChange={setFilterConfig}
+          showFilterType={false}
+          resultCount={filteredWorks.length}
+        />
+      </View>
+
+      {/* Status Filter Chips */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -242,7 +300,7 @@ const WorkScreen: React.FC = () => {
 
       {/* Work List */}
       <FlatList
-        data={filteredWorks}
+        data={paginatedWorks}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <WorkCard
@@ -264,6 +322,17 @@ const WorkScreen: React.FC = () => {
             actionLabel="Add Project"
             onAction={openAddModal}
           />
+        }
+        ListFooterComponent={
+          filteredWorks.length > 0 ? (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              itemsPerPage={ITEMS_PER_PAGE}
+              totalItems={filteredWorks.length}
+              onPageChange={setCurrentPage}
+            />
+          ) : null
         }
       />
 
@@ -452,6 +521,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 12,
+  },
+  filterCardContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   statBadge: {
     flexDirection: 'row',

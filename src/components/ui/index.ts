@@ -17,3 +17,5 @@ export { DateTimePicker } from './DateTimePicker';
 export { default as BankAccountSelector } from './BankAccountSelector';
 export { default as CardContextMenu } from './CardContextMenu';
 export { DataSyncStrategyModal, type SyncStrategy } from './DataSyncStrategyModal';
+export { default as FilterCard, type FilterConfig } from './FilterCard';
+export { default as Pagination } from './Pagination';
